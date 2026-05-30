@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import sqlite3
 import time
 import uuid
@@ -43,6 +44,7 @@ SLOT_CONTEXT_FIELDS = {
     "fallback_question",
     "operator_hint",
     "resolution_profile_id",
+    "autofill_source_ref",
     "examples",
 }
 
@@ -50,6 +52,7 @@ SLOT_METHOD_ALLOWED_FIELDS = {
     "user_question": {"user_question"},
     "case": {"case_source_ref"},
     "llm_extraction": {"extraction_instruction", "examples"},
+    "slot_autofill": {"autofill_source_ref"},
     "resolution_profile": {"resolution_profile_id", "fallback_question"},
     "operator_manual": {"operator_hint"},
 }
@@ -160,9 +163,89 @@ def schema_required(schema: dict[str, Any] | None) -> list[str]:
     return required if isinstance(required, list) else []
 
 
+def schema_type(schema: dict[str, Any] | None) -> str | None:
+    if not isinstance(schema, dict):
+        return None
+    value = schema.get("type")
+    if isinstance(value, list):
+        return next((str(item) for item in value if item != "null"), None)
+    return str(value) if value else None
+
+
+def schema_at_path(schema: dict[str, Any] | None, path: str | None) -> dict[str, Any] | None:
+    if not isinstance(schema, dict) or not path:
+        return None
+    current: dict[str, Any] | None = schema
+    for raw_part in str(path).replace("[]", "").split("."):
+        if not raw_part:
+            continue
+        current_type = schema_type(current)
+        if current_type == "array":
+            item_schema = current.get("items", {}) if isinstance(current, dict) else {}
+            current = item_schema if isinstance(item_schema, dict) else None
+        if not current:
+            return None
+        properties = schema_properties(current)
+        current = properties.get(raw_part)
+        if current is None:
+            return None
+    return current
+
+
+def schemas_are_type_compatible(source_schema: dict[str, Any] | None, target_schema: dict[str, Any] | None) -> bool:
+    source_type = schema_type(source_schema)
+    target_type = schema_type(target_schema)
+    if not source_type or not target_type:
+        return True
+    if source_type == target_type:
+        return True
+    return source_type == "integer" and target_type == "number"
+
+
 def default_request_schema() -> dict[str, Any]:
     return {
         "type": "object",
+        "additionalProperties": True,
+    }
+
+
+def default_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": True,
+    }
+
+
+def infer_schema_from_value(value: Any) -> dict[str, Any]:
+    if isinstance(value, bool):
+        return {"type": "boolean"}
+    if isinstance(value, int) and not isinstance(value, bool):
+        return {"type": "integer"}
+    if isinstance(value, float):
+        return {"type": "number"}
+    if isinstance(value, str):
+        return {"type": "string"}
+    if isinstance(value, list):
+        item_schema = infer_schema_from_value(value[0]) if value else {}
+        result = {"type": "array"}
+        if item_schema:
+            result["items"] = item_schema
+        return result
+    if isinstance(value, dict):
+        return infer_object_schema_from_sample(value)
+    return {}
+
+
+def infer_object_schema_from_sample(value: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(value, dict) or not value:
+        return default_response_schema()
+    return {
+        "type": "object",
+        "required": sorted(value.keys()),
+        "properties": {
+            key: infer_schema_from_value(item)
+            for key, item in value.items()
+        },
         "additionalProperties": True,
     }
 
@@ -190,6 +273,23 @@ def default_parameter_mapping(
             result[name] = f"react:{name}"
         elif name == "login" and "user_login" in tool_names:
             result[name] = "react:user_login"
+    return result
+
+
+def default_result_mapping(
+    tool: dict[str, Any],
+    operation: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    tool_schema = tool.get("result_schema", {})
+    response_schema = operation.get("response_schema") if operation else None
+    response_properties = schema_properties(response_schema)
+    result = {}
+    for name in dict.fromkeys([
+        *schema_required(tool_schema),
+        *schema_properties(tool_schema).keys(),
+    ]):
+        if name in response_properties:
+            result[name] = name
     return result
 
 
@@ -243,6 +343,53 @@ CANONICAL_OPERATION_REQUEST_SCHEMAS = {
             "device_name": string_property("Имя устройства"),
             "app_name": string_property("Приложение"),
             "error_text": string_property("Текст ошибки"),
+        },
+    ),
+}
+
+
+CANONICAL_OPERATION_RESPONSE_SCHEMAS = {
+    "check_zabbix_status": object_schema(
+        ["service_status", "message"],
+        {
+            "service_status": string_property(),
+            "message": string_property(),
+        },
+    ),
+    "query_cmdb_object": object_schema(
+        ["object_found", "message"],
+        {
+            "object_found": {"type": "boolean"},
+            "message": string_property(),
+        },
+    ),
+    "get_service_owner": object_schema(
+        ["owner_team", "message"],
+        {
+            "owner_team": string_property(),
+            "message": string_property(),
+        },
+    ),
+    "search_known_incidents": object_schema(
+        ["matches", "message"],
+        {
+            "matches": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+            "message": string_property(),
+        },
+    ),
+    "search_ad_users": object_schema(
+        ["candidate_count", "users", "message"],
+        {
+            "candidate_count": {"type": "integer", "minimum": 0},
+            "users": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+            "message": string_property(),
+        },
+    ),
+    "start_systemcenter_runbook": object_schema(
+        ["runbook_status", "message"],
+        {
+            "runbook_status": string_property(),
+            "message": string_property(),
         },
     ),
 }
@@ -322,11 +469,25 @@ def canonical_operation_request_schema(operation_id: str | None) -> dict[str, An
     return copy.deepcopy(schema) if schema else None
 
 
+def canonical_operation_response_schema(operation_id: str | None) -> dict[str, Any] | None:
+    schema = CANONICAL_OPERATION_RESPONSE_SCHEMAS.get(str(operation_id or ""))
+    return copy.deepcopy(schema) if schema else None
+
+
 def normalize_operation_definition(operation_id: str | None, operation: dict[str, Any]) -> None:
     operation.setdefault("request_schema", default_request_schema())
     canonical_schema = canonical_operation_request_schema(operation_id)
     if canonical_schema:
         operation["request_schema"] = canonical_schema
+    canonical_response_schema = canonical_operation_response_schema(operation_id)
+    if canonical_response_schema and "response_schema" not in operation:
+        operation["response_schema"] = canonical_response_schema
+    elif operation.get("mock_output") and "response_schema" not in operation:
+        operation["response_schema"] = infer_object_schema_from_sample(operation.get("mock_output"))
+    else:
+        operation.setdefault("response_schema", default_response_schema())
+    operation.setdefault("contract_version", "1.0")
+    operation.setdefault("contract_status", "valid")
 
 
 def merge_legacy_integration_endpoints(payload: dict[str, Any]) -> dict[str, Any]:
@@ -399,6 +560,8 @@ def slot_source_summary(slot: dict[str, Any]) -> dict[str, Any]:
             "extraction_instruction": slot.get("extraction_instruction"),
             "examples": slot.get("examples", []),
         }
+    if fill_method == "slot_autofill":
+        return {"autofill_source_ref": slot.get("autofill_source_ref")}
     if fill_method == "operator_manual":
         return {"operator_hint": slot.get("operator_hint")}
     if fill_method == "user_question":
@@ -521,6 +684,51 @@ def append_trace(
     if details:
         item["details"] = details
     trace.append(item)
+
+
+def compact_trace_value(value: Any, limit: int = 120) -> str:
+    if isinstance(value, (dict, list)):
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    else:
+        text = str(value)
+    return text if len(text) <= limit else f"{text[:limit - 3]}..."
+
+
+def resolved_dry_run_parameters(
+    mapping: dict[str, Any],
+    *,
+    provided: dict[str, Any],
+    slot_values: dict[str, Any] | None = None,
+    enrichment_entities: dict[str, Any] | None = None,
+    output_values: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    parameters: dict[str, Any] = {}
+    slots = slot_values or {}
+    entities = enrichment_entities or {}
+    outputs = output_values or {}
+    for parameter, source_ref in (mapping or {}).items():
+        source, separator, source_value = str(source_ref).partition(":")
+        if separator != ":":
+            continue
+        value: Any = None
+        if source == "slot":
+            if source_value in provided:
+                value = provided.get(source_value)
+            elif source_value in slots:
+                slot_value = slots[source_value]
+                value = slot_value.get("value") if isinstance(slot_value, dict) else slot_value
+        elif source == "output":
+            value = outputs.get(source_value)
+        elif source == "entity":
+            entity_name, _, field_path = source_value.partition(".")
+            entity_result = (entities.get(entity_name) or {}).get("result")
+            value = value_at_path(entity_result, field_path) if field_path else entity_result
+        elif source == "constant":
+            value = source_value
+        elif source == "secret":
+            value = "секрет скрыт"
+        parameters[parameter] = value if value not in (None, "") else source_ref
+    return parameters
 
 
 def profile_confidence_thresholds(profile: dict[str, Any] | None) -> dict[str, float]:
@@ -893,85 +1101,127 @@ def normalize_attribute_resolution_profile(profile: dict[str, Any]) -> dict[str,
     result = copy.deepcopy(profile)
     result.pop("allowed_scenarios", None)
     target_slot_id = result.get("target_slot_id") or result.get("output_slots", ["value"])[0]
-    result["target_slot_id"] = target_slot_id
-    result.setdefault("output_slots", [target_slot_id])
-    if target_slot_id not in result["output_slots"]:
-        result["output_slots"].insert(0, target_slot_id)
 
     legacy_steps = result.pop("steps", [])
     result.pop("resolution_mode", None)
     result.pop("attempt_scope", None)
-    legacy_intermediate = result.pop("intermediate_attributes", [])
     legacy_ambiguity = result.pop("ambiguity_policy", {})
     legacy_handoff_package = result.pop("operator_handoff_package", None)
+    legacy_candidate_mapping = result.pop("candidate_mapping", None)
 
-    if not result.get("input_attributes"):
-        input_attributes: list[dict[str, Any]] = []
-        seen_attributes: set[str] = set()
-        for slot_id in result.pop("input_slots", []):
-            if slot_id in seen_attributes:
+    if "input_slots" not in result:
+        input_slots: list[dict[str, Any]] = []
+        seen_slots: set[str] = set()
+        legacy_input_slots = result.pop("input_slots", [])
+        for slot_id in legacy_input_slots:
+            if slot_id in seen_slots:
                 continue
-            seen_attributes.add(slot_id)
-            input_attributes.append(
-                resolution_attribute(
-                    slot_id,
-                    source="slot",
-                    source_ref=slot_id,
-                    required=True,
-                )
-            )
-        for attr_id in legacy_intermediate:
-            if attr_id in seen_attributes or attr_id.endswith("_candidates") or attr_id == "ad_candidates":
+            seen_slots.add(slot_id)
+            input_slots.append({
+                "slot_id": slot_id,
+                "required_for_operation": True,
+                "can_ask_user": True,
+                "description": f"Входной слот {humanize_config_id(slot_id)}.",
+            })
+        for attribute in result.get("input_attributes", []):
+            if attribute.get("source") != "slot":
                 continue
-            seen_attributes.add(attr_id)
-            input_attributes.append(
-                resolution_attribute(
-                    attr_id,
-                    source="llm",
-                    extraction_instruction=f"Извлеки {humanize_config_id(attr_id)} из текста обращения.",
-                )
-            )
-        result["input_attributes"] = input_attributes
-    else:
-        result.pop("input_slots", None)
+            slot_id = attribute.get("source_ref") or attribute.get("attribute_id")
+            if not slot_id or slot_id in seen_slots:
+                continue
+            seen_slots.add(slot_id)
+            input_slots.append({
+                "slot_id": slot_id,
+                "required_for_operation": bool(attribute.get("required", True)),
+                "can_ask_user": True,
+                "description": attribute.get("display_name") or humanize_config_id(slot_id),
+            })
+        if not input_slots:
+            input_slots.append({
+                "slot_id": target_slot_id,
+                "required_for_operation": False,
+                "can_ask_user": True,
+                "description": f"Основной слот {humanize_config_id(target_slot_id)}.",
+            })
+        result["input_slots"] = input_slots
 
-    if not result.get("candidate_source"):
+    if "resolver_operation" not in result:
         tool_step = next((step for step in legacy_steps if step.get("type") == "tool_call"), None)
         history_step = next((step for step in legacy_steps if step.get("type") == "ticket_history_search"), None)
-        if tool_step:
-            candidate_source = {
+        candidate_source = result.get("candidate_source")
+        if candidate_source:
+            normalize_endpoint_reference(candidate_source)
+            resolver_operation = {
+                "source_type": candidate_source.get("source_type", "disabled"),
+                "tool_name": candidate_source.get("tool_name"),
+                "endpoint_id": candidate_source.get("endpoint_id"),
+                "operation_id": candidate_source.get("operation_id"),
+                "parameter_mapping": slot_parameter_mapping_from_legacy(
+                    candidate_source.get("parameter_mapping", {}),
+                    result.get("input_attributes", []),
+                ),
+            }
+            if candidate_source.get("history_filter"):
+                resolver_operation["history_filter"] = candidate_source["history_filter"]
+        elif tool_step:
+            resolver_operation = {
                 "source_type": "react_call",
                 "tool_name": tool_step.get("tool_name"),
                 "endpoint_id": normalize_endpoint_id(tool_step.get("endpoint_id")),
                 "operation_id": tool_step.get("operation_id"),
-                "parameter_mapping": tool_step.get("parameter_bindings", {}),
+                "parameter_mapping": slot_parameter_mapping_from_legacy(
+                    tool_step.get("parameter_bindings", {}),
+                    result.get("input_attributes", []),
+                ),
             }
         elif history_step:
-            candidate_source = {
+            resolver_operation = {
                 "source_type": "ticket_history",
                 "history_filter": history_step.get("history_filter", {}),
                 "parameter_mapping": {},
             }
         else:
-            candidate_source = {
+            resolver_operation = {
                 "source_type": "disabled",
                 "parameter_mapping": {},
             }
-        result["candidate_source"] = candidate_source
-    else:
-        normalize_endpoint_reference(result["candidate_source"])
-        result["candidate_source"].setdefault("parameter_mapping", {})
+        resolver_operation["parameter_mapping"] = resolver_operation.get("parameter_mapping", {})
+        result["resolver_operation"] = compact_config_dict(resolver_operation, keep_empty={"parameter_mapping"})
 
-    legacy_candidate_mapping = result.pop("candidate_mapping", None)
-    result.setdefault(
-        "result_policy",
-        result_policy_from_candidate_mapping(
-            legacy_candidate_mapping,
-            result["candidate_source"].get("tool_name"),
-            target_slot_id,
-        ),
+    result_policy = result.get("result_policy") or result_policy_from_candidate_mapping(
+        legacy_candidate_mapping,
+        result.get("resolver_operation", {}).get("tool_name"),
+        target_slot_id,
     )
-    result["decision_policy"] = normalize_resolution_decision_policy(result.get("decision_policy"))
+    if "operation_result_entity" not in result:
+        result["operation_result_entity"] = operation_result_entity_from_policy(
+            result.get("resolver_operation", {}),
+            result_policy,
+        )
+    if "enrichment_steps" not in result:
+        result["enrichment_steps"] = enrichment_steps_from_legacy(
+            result.get("resolver_operation", {}),
+            result.get("operation_result_entity", {}),
+        )
+    if "output_slots_order" not in result:
+        output_slots = result.get("output_slots") or [target_slot_id]
+        result["output_slots_order"] = output_slots_order_from_policy(
+            target_slot_id,
+            output_slots,
+            result_policy,
+        )
+    if target_slot_id not in [item["slot_id"] for item in result["output_slots_order"]]:
+        result["output_slots_order"].insert(
+            0,
+            {
+                "slot_id": target_slot_id,
+                "order": 1,
+                "required_for_success": True,
+                "source_hint": target_slot_id,
+                "fallback": "ask_clarification",
+            },
+        )
+    result["output_slots_order"] = normalize_output_slot_order(result["output_slots_order"], target_slot_id)
 
     fallback = result.setdefault(
         "fallback",
@@ -980,56 +1230,373 @@ def normalize_attribute_resolution_profile(profile: dict[str, Any]) -> dict[str,
             "question": "Не удалось однозначно заполнить атрибут.",
         },
     )
-    clarification_question = (
-        result.get("clarification_policy", {}).get("question")
-        or legacy_ambiguity.get("question")
-        or fallback.get("question")
-        or "Уточните данные для заполнения атрибута."
-    )
-    clarification_attrs = (
-        result.get("clarification_policy", {}).get("ask_for_attributes")
-        or legacy_ambiguity.get("ask_for_attributes")
-        or [
-            item["attribute_id"]
-            for item in result.get("input_attributes", [])
-            if item.get("source") in {"operator_answer", "llm"}
-        ][:3]
-    )
-    result.setdefault(
+    if "human_resolution_policy" not in result:
+        clarification_question = (
+            result.get("clarification_policy", {}).get("question")
+            or legacy_ambiguity.get("question")
+            or fallback.get("question")
+            or "Уточните данные для заполнения атрибута."
+        )
+        output_slot_ids = [item["slot_id"] for item in result["output_slots_order"]]
+        input_slot_ids = [item["slot_id"] for item in result["input_slots"]]
+        clarification_slots = [
+            slot_id
+            for slot_id in (
+                result.get("clarification_policy", {}).get("ask_for_attributes")
+                or legacy_ambiguity.get("ask_for_attributes")
+                or input_slot_ids
+            )
+            if slot_id in input_slot_ids or slot_id in output_slot_ids
+        ] or input_slot_ids[:1] or output_slot_ids[:1]
+        handoff_package = [
+            slot_id
+            for slot_id in (
+                result.get("handoff_policy", {}).get("package")
+                or legacy_handoff_package
+                or [*input_slot_ids, *output_slot_ids]
+            )
+            if slot_id in input_slot_ids or slot_id in output_slot_ids
+        ] or output_slot_ids[:1]
+        result["human_resolution_policy"] = {
+            "clarification_question": clarification_question,
+            "clarification_slots": clarification_slots,
+            "handoff_package": handoff_package,
+            "handoff_action": result.get("handoff_policy", {}).get("action", "operator_handoff"),
+            "fallback_action": fallback.get("action", "operator_handoff"),
+        }
+    if "llm_resolution_script" not in result:
+        result["llm_resolution_script"] = {
+            "script_text": default_resolution_script_text(result),
+            "response_contract": default_resolution_response_contract(),
+        }
+
+    for legacy_key in (
+        "input_attributes",
+        "candidate_source",
+        "result_policy",
+        "decision_policy",
         "clarification_policy",
-        {
-            "question": clarification_question,
-            "ask_for_attributes": clarification_attrs,
-        },
-    )
-    result.setdefault(
         "handoff_policy",
-        {
-            "action": "operator_handoff",
-            "package": legacy_handoff_package or [
-                *[item["attribute_id"] for item in result.get("input_attributes", [])],
-                *result.get("output_slots", []),
-            ],
-        },
-    )
-    declared = {attribute["attribute_id"] for attribute in result.get("input_attributes", [])}
-    declared.update(result.get("output_slots", []))
-    handoff_policy = result["handoff_policy"]
-    handoff_policy["package"] = [
-        attribute_id
-        for attribute_id in handoff_policy.get("package", [])
-        if attribute_id in declared
-    ] or [target_slot_id]
+        "output_slots",
+        "resolver_operation",
+        "operation_result_entity",
+    ):
+        result.pop(legacy_key, None)
     result.setdefault("max_attempts", 1)
     result.setdefault("audit_required", True)
     result.setdefault("log_required", True)
     return result
 
 
+def compact_config_dict(value: dict[str, Any], keep_empty: set[str] | None = None) -> dict[str, Any]:
+    keep_empty = keep_empty or set()
+    return {
+        key: item
+        for key, item in value.items()
+        if key in keep_empty or item not in (None, "", [], {})
+    }
+
+
+def slot_parameter_mapping_from_legacy(
+    mapping: dict[str, Any],
+    input_attributes: list[dict[str, Any]],
+) -> dict[str, str]:
+    attribute_by_id = {
+        attribute.get("attribute_id"): attribute
+        for attribute in input_attributes or []
+    }
+    result = {}
+    for parameter, source_ref in (mapping or {}).items():
+        source, separator, source_value = str(source_ref).partition(":")
+        if separator != ":" or not source_value:
+            continue
+        if source == "slot":
+            result[parameter] = f"slot:{source_value}"
+        elif source == "attribute":
+            attribute = attribute_by_id.get(source_value, {})
+            if attribute.get("source") == "slot":
+                result[parameter] = f"slot:{attribute.get('source_ref') or source_value}"
+    return result
+
+
+def operation_result_entity_from_policy(
+    resolver_operation: dict[str, Any],
+    result_policy: dict[str, Any],
+) -> dict[str, Any]:
+    operation_id = resolver_operation.get("operation_id") or resolver_operation.get("source_type") or "result"
+    entity_name = (
+        str(result_policy.get("list_path") or result_policy.get("object_path") or operation_id)
+        .replace(".", "_")
+        .replace("-", "_")
+    )
+    fields = []
+    for field_id in [
+        result_policy.get("target_value_path"),
+        result_policy.get("confidence_path"),
+        result_policy.get("display_value_path"),
+        *list((result_policy.get("output_mapping") or {}).values()),
+    ]:
+        if not field_id:
+            continue
+        normalized = str(field_id).split(".")[-1]
+        if normalized and normalized not in [item["field_id"] for item in fields]:
+            fields.append({
+                "field_id": normalized,
+                "display_name": humanize_config_id(normalized),
+                "field_type": "unknown",
+            })
+    return {
+        "entity_name": entity_name or "result",
+        "entity_description": f"Результат операции {humanize_config_id(operation_id)}.",
+        "available_fields": fields,
+    }
+
+
+def enrichment_steps_from_legacy(
+    resolver_operation: dict[str, Any],
+    result_entity: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if resolver_operation.get("source_type") != "react_call" or not resolver_operation.get("tool_name"):
+        return []
+    entity_name = result_entity.get("entity_name") or resolver_operation.get("operation_id") or "result"
+    return [
+        {
+            "step_name": f"Получить {humanize_config_id(entity_name)}",
+            "react_call": resolver_operation["tool_name"],
+            "parameter_mapping": resolver_operation.get("parameter_mapping", {}),
+            "result_entity_name": entity_name,
+            "result_entity_description": result_entity.get("entity_description")
+            or f"Результат ReAct-вызова {humanize_config_id(resolver_operation['tool_name'])}.",
+            "result_fields": result_entity.get("available_fields", []),
+            "on_error": "continue_to_llm",
+        }
+    ]
+
+
+def result_entity_from_enrichment_step(step: dict[str, Any] | None) -> dict[str, Any]:
+    step = step or {}
+    return {
+        "entity_name": step.get("result_entity_name") or "result",
+        "entity_description": step.get("result_entity_description") or "Результат ReAct-вызова.",
+        "available_fields": step.get("result_fields", []),
+    }
+
+
+def output_slots_order_from_policy(
+    target_slot_id: str,
+    output_slots: list[str],
+    result_policy: dict[str, Any],
+) -> list[dict[str, Any]]:
+    result = []
+    seen = set()
+    for index, slot_id in enumerate(output_slots or [target_slot_id], start=1):
+        if not slot_id or slot_id in seen:
+            continue
+        seen.add(slot_id)
+        source_hint = result_policy.get("target_value_path") if slot_id == target_slot_id else None
+        source_hint = source_hint or (result_policy.get("output_mapping") or {}).get(slot_id) or slot_id
+        result.append({
+            "slot_id": slot_id,
+            "order": index,
+            "required_for_success": slot_id == target_slot_id,
+            "source_hint": str(source_hint),
+            "fallback": "ask_clarification" if slot_id == target_slot_id else "leave_empty",
+        })
+    return result
+
+
+def normalize_output_slot_order(items: list[dict[str, Any]], target_slot_id: str) -> list[dict[str, Any]]:
+    normalized = []
+    seen = set()
+    for item in sorted(items or [], key=lambda value: int(value.get("order", 999))):
+        slot_id = item.get("slot_id")
+        if not slot_id or slot_id in seen:
+            continue
+        seen.add(slot_id)
+        normalized.append({
+            "slot_id": slot_id,
+            "order": len(normalized) + 1,
+            "required_for_success": bool(item.get("required_for_success", slot_id == target_slot_id)),
+            "source_hint": item.get("source_hint") or slot_id,
+            "fallback": item.get("fallback") or ("ask_clarification" if slot_id == target_slot_id else "leave_empty"),
+        })
+    return normalized
+
+
+def normalize_slot_autofill_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    result = copy.deepcopy(profile)
+    result.setdefault("status", "draft")
+    result["enabled"] = result.get("status") == "active"
+    result.setdefault("run_order", 1)
+    result.setdefault("accept_policy", "single_result")
+    result.setdefault("input_mapping", {})
+    result.setdefault("output_mapping", [])
+    result.setdefault("on_no_result", "continue")
+    result.setdefault("on_ambiguous_result", "ask_client")
+    normalized_output = []
+    seen: set[tuple[str, str]] = set()
+    for item in result.get("output_mapping", []):
+        result_field = item.get("result_field")
+        target_slot = item.get("target_slot")
+        if not result_field or not target_slot:
+            continue
+        key = (result_field, target_slot)
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized_output.append(
+            {
+                "result_field": result_field,
+                "target_slot": target_slot,
+                "required_for_success": bool(item.get("required_for_success", False)),
+            }
+        )
+    result["output_mapping"] = normalized_output
+    return result
+
+
+def default_resolution_response_contract() -> dict[str, Any]:
+    return {
+        "decision": "fill | ask_clarification | handoff | leave_empty",
+        "filled_slots": {"<slot_id>": "string|null"},
+        "confidence": "number 0..1",
+        "next_question": "string",
+        "reason": "short russian explanation",
+    }
+
+
+def default_resolution_script_text(profile: dict[str, Any]) -> str:
+    output_slots = ", ".join(item["slot_id"] for item in profile.get("output_slots_order", []))
+    entity_names = ", ".join(
+        step.get("result_entity_name", "result")
+        for step in profile.get("enrichment_steps", [])
+    ) or "нет результатов ReAct-вызовов"
+    return (
+        "Проанализируй входные слоты и именованные результаты ReAct-вызовов. "
+        f"Доступные сущности результата: {entity_names}. "
+        f"Заполняй только разрешенные выходные слоты: {output_slots or profile.get('target_slot_id')}. "
+        "Если результат однозначный, верни decision=fill и filled_slots. "
+        "Если данных недостаточно или кандидатов несколько, верни decision=ask_clarification и один уточняющий вопрос. "
+        "Если уверенно решить нельзя после попыток, верни decision=handoff."
+    )
+
+
+def operation_response_items(
+    operation_result: dict[str, Any],
+    result_entity: dict[str, Any],
+) -> tuple[int, dict[str, Any] | None, dict[str, Any]]:
+    entity_name = result_entity.get("entity_name")
+    if entity_name:
+        raw = value_at_path(operation_result, entity_name)
+        if isinstance(raw, list):
+            return len(raw), (raw[0] if raw else None), {
+                "result_type": "list",
+                "entity_name": entity_name,
+                "item_count": len(raw),
+                "source_status": "mock_output",
+            }
+        if isinstance(raw, dict):
+            return 1, raw, {
+                "result_type": "object",
+                "entity_name": entity_name,
+                "object_found": True,
+                "source_status": "mock_output",
+            }
+    for key, value in operation_result.items():
+        if isinstance(value, list):
+            return len(value), (value[0] if value else None), {
+                "result_type": "list",
+                "entity_name": key,
+                "item_count": len(value),
+                "source_status": "mock_output",
+            }
+    object_found = operation_result.get("object_found")
+    if object_found is False:
+        return 0, None, {
+            "result_type": "object",
+            "entity_name": entity_name or "result",
+            "object_found": False,
+            "source_status": "mock_output",
+        }
+    return 1, operation_result, {
+        "result_type": "object",
+        "entity_name": entity_name or "result",
+        "object_found": True,
+        "source_status": "mock_output",
+    }
+
+
+def operation_result_value(result_item: dict[str, Any] | None, source_hint: str, entity_name: str | None = None) -> Any:
+    if not result_item or not source_hint:
+        return None
+    hint = str(source_hint).replace("[]", "")
+    if entity_name and hint.startswith(f"{entity_name}."):
+        hint = hint[len(entity_name) + 1 :]
+    return value_at_path(result_item, hint)
+
+
+def is_missing_autofill_value(value: Any) -> bool:
+    return value is None or value == "" or value == []
+
+
+def simulated_llm_resolution_decision(
+    *,
+    profile: dict[str, Any],
+    result_item: dict[str, Any] | None,
+    count: int,
+    confidence: float,
+    effective_thresholds: dict[str, float],
+) -> dict[str, Any]:
+    human_policy = profile["human_resolution_policy"]
+    enrichment_steps = profile.get("enrichment_steps", [])
+    entity_name = enrichment_steps[-1].get("result_entity_name") if enrichment_steps else None
+    output_values = {}
+    if count == 1 and result_item:
+        for rule in profile["output_slots_order"]:
+            value = operation_result_value(result_item, rule.get("source_hint", ""), entity_name)
+            if value is not None:
+                output_values[rule["slot_id"]] = value
+    required_slots = [
+        rule["slot_id"]
+        for rule in profile["output_slots_order"]
+        if rule.get("required_for_success")
+    ]
+    missing_required = [
+        slot_id
+        for slot_id in required_slots
+        if output_values.get(slot_id) in (None, "")
+    ]
+    if count == 1 and not missing_required and confidence >= effective_thresholds["auto_accept_confidence"]:
+        return {
+            "decision": "fill",
+            "status": "filled",
+            "filled_slots": output_values,
+            "confidence": confidence,
+            "next_question": "",
+            "reason": "LLM-правило dry-run приняло единственный результат операции.",
+        }
+    if count == 0:
+        reason = "Операция не вернула результатов."
+    elif count > 1:
+        reason = "Операция вернула несколько результатов."
+    elif missing_required:
+        reason = f"Не заполнены обязательные выходные слоты: {', '.join(missing_required)}."
+    else:
+        reason = "Confidence результата ниже порога автозаполнения."
+    return {
+        "decision": "ask_clarification",
+        "status": "question_required",
+        "filled_slots": {},
+        "confidence": confidence,
+        "next_question": human_policy["clarification_question"],
+        "reason": reason,
+    }
+
+
 def resolution_profile_question(profile: dict[str, Any]) -> str | None:
-    clarification_policy = profile.get("clarification_policy", {})
-    if clarification_policy.get("question"):
-        return clarification_policy["question"]
+    human_policy = profile.get("human_resolution_policy", {})
+    if human_policy.get("clarification_question"):
+        return human_policy["clarification_question"]
     return profile.get("fallback", {}).get("question")
 
 
@@ -1038,6 +1605,51 @@ def resolution_profile_current_step(profile: dict[str, Any]) -> dict[str, Any] |
         if step["type"] in {"clarification", "operator_handoff", "escalate"}:
             return step
     return profile.get("steps", [None])[-1]
+
+
+def tool_usage_refs(
+    tool_name: str,
+    matrix_payload: dict[str, Any],
+    resolution_payload: dict[str, Any],
+    channels_payload: dict[str, Any],
+    slot_autofill_payload: dict[str, Any] | None = None,
+) -> list[str]:
+    refs = []
+    for matrix in matrix_payload.get("matrices", []):
+        for launch in matrix.get("launches", []):
+            if launch.get("tool_name") == tool_name:
+                refs.append(f"matrix:{matrix.get('matrix_id')}/{launch.get('launch_id')}")
+    for profile in resolution_payload.get("profiles", []):
+        if any(step.get("react_call") == tool_name for step in profile.get("enrichment_steps", [])):
+            refs.append(f"attribute_resolution_profile:{profile.get('profile_id')}")
+    for profile in (slot_autofill_payload or {}).get("profiles", []):
+        if profile.get("react_call") == tool_name:
+            refs.append(f"slot_autofill_profile:{profile.get('profile_id')}")
+    for channel in channels_payload.get("channels", []):
+        for action_key in ("question_delivery", "incomplete_discussion_action", "escalation_action"):
+            if channel.get(action_key, {}).get("tool_name") == tool_name:
+                refs.append(f"interaction_channel:{channel.get('channel_id')}/{action_key}")
+        for profile in channel.get("action_profiles", []):
+            if profile.get("action", {}).get("tool_name") == tool_name:
+                refs.append(f"interaction_channel:{channel.get('channel_id')}/profile:{profile.get('profile_id')}")
+    return refs
+
+
+def endpoint_operation_usage_refs(
+    endpoint_id: str,
+    operation_id: str,
+    tools_payload: dict[str, Any],
+    workflows_payload: dict[str, Any],
+) -> list[str]:
+    refs = []
+    for tool in tools_payload.get("tools", []):
+        for binding in tool.get("endpoint_bindings", []):
+            if binding.get("endpoint_id") == endpoint_id and binding.get("operation_id") == operation_id:
+                refs.append(f"react_call:{tool.get('tool_name')}")
+    for workflow in workflows_payload.get("workflows", []):
+        if workflow.get("endpoint_id") == endpoint_id and operation_id in workflow.get("operations", []):
+            refs.append(f"n8n_workflow:{workflow.get('workflow_id')}")
+    return refs
 
 
 def root_attribute(attribute_ref: str | None) -> str | None:
@@ -1114,6 +1726,112 @@ def result_confidence(result_item: dict[str, Any] | None, result_policy: dict[st
         return max(0.0, min(1.0, float(raw_confidence)))
     except (TypeError, ValueError):
         return 0.9
+
+
+def normalized_match_text(value: str) -> str:
+    return " ".join(str(value or "").lower().split())
+
+
+def classification_rule(
+    text: str,
+    *,
+    match_type: str = "contains",
+    polarity: str = "positive",
+    weight: float = 0.5,
+    required: bool = False,
+    blocking: bool = False,
+    explanation: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "text": text,
+        "match_type": match_type,
+        "polarity": polarity,
+        "weight": weight,
+        "required": required,
+        "blocking": blocking,
+        "explanation": explanation or f"Признак классификации: {text}",
+    }
+
+
+def classification_rule_matches(text: str, rule: dict[str, Any]) -> bool:
+    normalized_text = normalized_match_text(text)
+    normalized_rule = normalized_match_text(rule.get("text", ""))
+    if not normalized_rule:
+        return False
+    match_type = rule.get("match_type", "contains")
+    if match_type == "word":
+        return re.search(rf"(?<!\w){re.escape(normalized_rule)}(?!\w)", normalized_text, re.UNICODE) is not None
+    if match_type == "phrase":
+        return normalized_rule in normalized_text
+    return normalized_rule in normalized_text
+
+
+def score_classification_route(route: dict[str, Any], text: str) -> dict[str, Any]:
+    rule_items = route.get("rules", {}).get("rule_items", [])
+    positive_total = 0.0
+    positive_score = 0.0
+    negative_score = 0.0
+    positive_hits: list[dict[str, Any]] = []
+    negative_hits: list[dict[str, Any]] = []
+    required_missing: list[dict[str, Any]] = []
+    blocked_by_rules: list[dict[str, Any]] = []
+    for rule in rule_items:
+        weight = float(rule.get("weight") or 0)
+        matched = classification_rule_matches(text, rule)
+        rule_summary = {
+            "text": rule.get("text"),
+            "match_type": rule.get("match_type"),
+            "polarity": rule.get("polarity"),
+            "weight": weight,
+            "explanation": rule.get("explanation"),
+        }
+        if rule.get("polarity") == "negative":
+            if matched:
+                negative_score += weight
+                negative_hits.append(rule_summary)
+                if rule.get("blocking"):
+                    blocked_by_rules.append(rule_summary)
+            continue
+        positive_total += weight
+        if matched:
+            positive_score += weight
+            positive_hits.append(rule_summary)
+        elif rule.get("required"):
+            required_missing.append(rule_summary)
+
+    if blocked_by_rules or required_missing or positive_total <= 0:
+        confidence = 0.0
+    else:
+        confidence = max(0.0, min(1.0, positive_score - negative_score))
+
+    return {
+        "route_id": route["route_id"],
+        "display_name": route.get("display_name", route["route_id"]),
+        "route": route["route"],
+        "priority": route["priority"],
+        "workflow_state_id": route["workflow_state_id"],
+        "confidence": round(confidence, 3),
+        "positive_score": round(positive_score, 3),
+        "negative_score": round(negative_score, 3),
+        "positive_hits": positive_hits,
+        "negative_hits": negative_hits,
+        "required_missing": required_missing,
+        "blocked_by_rules": blocked_by_rules,
+    }
+
+
+def classification_decision_level(confidence: float, route: dict[str, Any] | None) -> str:
+    thresholds = (route or {}).get("confidence", {})
+    rules_min = float(thresholds.get("rules_min", 0.85))
+    llm_min = float(thresholds.get("llm_min", 0.70))
+    human_handoff_below = float(thresholds.get("human_handoff_below", 0.50))
+    if confidence >= rules_min:
+        return "accepted_by_rules"
+    if confidence >= llm_min:
+        return "llm_required"
+    if confidence >= human_handoff_below:
+        return "human_review_required"
+    return "human_required"
 
 
 def humanize_config_id(value: str) -> str:
@@ -1260,6 +1978,13 @@ CONFIG_DOMAINS: dict[str, ConfigDomain] = {
         read_permission="workflow.read",
         manage_permission="workflow.manage",
     ),
+    "slot_autofill_profiles": ConfigDomain(
+        domain="slot_autofill_profiles",
+        title="Профили автозаполнения слотов",
+        contract_name="slot_autofill_profiles",
+        read_permission="workflow.read",
+        manage_permission="workflow.manage",
+    ),
 }
 
 
@@ -1311,6 +2036,8 @@ class ConfigStore:
             return default_interaction_channels()
         if domain == "attribute_resolution_profiles":
             return default_attribute_resolution_profiles()
+        if domain == "slot_autofill_profiles":
+            return default_slot_autofill_profiles()
         if domain == "service_scenarios":
             return default_service_scenarios()
         if domain == "slot_schemas":
@@ -1375,6 +2102,9 @@ class ConfigStore:
             }
             for tool in normalized.get("tools", []):
                 tool.get("policy", {}).pop("allowed_environments", None)
+                tool.setdefault("contract_version", "1.0")
+                tool.setdefault("contract_status", "valid")
+                tool.setdefault("result_schema", default_response_schema())
                 canonical_schema = canonical_react_parameter_schema(tool.get("tool_name"))
                 if canonical_schema:
                     tool["parameters_schema"] = canonical_schema
@@ -1390,6 +2120,7 @@ class ConfigStore:
                         binding["parameter_mapping"] = default_parameter_mapping(tool, operation)
                     else:
                         binding.setdefault("parameter_mapping", default_parameter_mapping(tool, operation))
+                    binding.setdefault("result_mapping", default_result_mapping(tool, operation))
                     binding_key = (binding.get("endpoint_id"), binding.get("operation_id"))
                     if binding_key in seen_bindings:
                         continue
@@ -1399,6 +2130,11 @@ class ConfigStore:
         elif domain == "attribute_resolution_profiles":
             normalized["profiles"] = [
                 normalize_attribute_resolution_profile(profile)
+                for profile in normalized.get("profiles", [])
+            ]
+        elif domain == "slot_autofill_profiles":
+            normalized["profiles"] = [
+                normalize_slot_autofill_profile(profile)
                 for profile in normalized.get("profiles", [])
             ]
         elif domain == "slot_schemas":
@@ -1486,7 +2222,7 @@ class ConfigStore:
         elif domain == "prompt_packs":
             replacements = {
                 "передай Л1": "передай человеку",
-                "передачей Л1": "передачей человеку",
+                "передачей Л1": "эскалацией оператору",
                 "Передавай на Л2": "Передавай в канал эскалации",
                 "эскалируй на Л2": "эскалируй через канал взаимодействия",
                 "Л1": "человеку",
@@ -1575,6 +2311,12 @@ class ConfigStore:
             self.active_payload("attribute_resolution_profiles")["profiles"],
             "profile_id",
         )
+        slot_autofill_profiles = [
+            profile
+            for profile in self.active_payload("slot_autofill_profiles").get("profiles", [])
+            if profile.get("slot_schema_id") == scenario["slot_schema_id"]
+            and profile.get("enabled", True)
+        ]
         resolution_profile_ids = []
         if slot_schema:
             resolution_profile_ids = [
@@ -1609,6 +2351,14 @@ class ConfigStore:
                     profile = profile_by_id.get(profile_id or "")
                     if not profile:
                         missing.append(f"attribute_resolution_profile:{slot['slot_id']}")
+                if slot_fill_method(slot) == "slot_autofill":
+                    mapped = any(
+                        slot["slot_id"] == item.get("target_slot")
+                        for profile in slot_autofill_profiles
+                        for item in profile.get("output_mapping", [])
+                    )
+                    if not mapped:
+                        missing.append(f"slot_autofill_profile:{slot['slot_id']}")
             for launch in launches:
                 for required_slot_id in launch.get("required_slots", []):
                     if required_slot_id not in slot_ids:
@@ -1631,6 +2381,7 @@ class ConfigStore:
             "scenario": scenario,
             "slot_schema": slot_schema,
             "attribute_resolution_profiles": scenario_profiles,
+            "slot_autofill_profiles": slot_autofill_profiles,
             "route": route,
             "orchestrator_policy": policy,
             "tool_launch_matrix": tool_launch_matrix,
@@ -1647,6 +2398,455 @@ class ConfigStore:
                 "missing": missing,
             },
         }
+
+    def orchestration_graph(
+        self,
+        *,
+        scenario_id: str | None = None,
+        view: str = "scenario",
+    ) -> dict[str, Any]:
+        graph_view = view if view in {"base", "scenario"} else "scenario"
+        scenarios = list(self._scenario_by_id().values())
+        detail = None
+        if graph_view == "scenario":
+            selected_scenario_id = scenario_id or (scenarios[0]["scenario_id"] if scenarios else None)
+            if selected_scenario_id:
+                detail = self.scenario_detail(selected_scenario_id)
+                scenario_id = selected_scenario_id
+            else:
+                graph_view = "base"
+
+        nodes = self._orchestration_graph_nodes(detail=detail)
+        edges = self._orchestration_graph_edges()
+        warnings = []
+        if detail and detail["readiness"]["status"] != "ready":
+            warnings.extend(
+                f"Не заполнена связь сценария: {item}"
+                for item in detail["readiness"].get("missing", [])
+            )
+        return {
+            "schema_version": "1.0",
+            "graph_id": f"scenario.{scenario_id}" if detail else "base.orchestrator",
+            "view": graph_view,
+            "scenario_id": scenario_id if detail else None,
+            "title": (
+                f"Граф сценария: {detail['scenario']['display_name']}"
+                if detail
+                else "Базовый граф оркестрации"
+            ),
+            "readonly": True,
+            "layout": {
+                "width": 1760,
+                "height": 520,
+                "node_width": 180,
+                "node_height": 82,
+            },
+            "nodes": nodes,
+            "edges": edges,
+            "warnings": warnings,
+        }
+
+    def _orchestration_graph_nodes(self, *, detail: dict[str, Any] | None) -> list[dict[str, Any]]:
+        tool_catalog = self.active_payload("tools")
+        endpoint_catalog = self.active_payload("integration_endpoints")
+        tool_by_name = self._by_id(tool_catalog["tools"], "tool_name")
+        endpoint_by_id = self._by_id(endpoint_catalog["endpoints"], "endpoint_id")
+
+        def item_status(item: dict[str, Any] | None) -> str:
+            return "valid" if item else "missing"
+
+        def config_ref(
+            *,
+            domain: str,
+            title: str,
+            item: dict[str, Any] | None,
+            id_key: str,
+            view_name: str,
+        ) -> dict[str, Any] | None:
+            if not item:
+                return None
+            return {
+                "domain": domain,
+                "title": title,
+                "id": item.get(id_key),
+                "display_name": item.get("display_name") or item.get(id_key),
+                "view": view_name,
+            }
+
+        def compact_refs(refs: list[dict[str, Any] | None]) -> list[dict[str, Any]]:
+            return [ref for ref in refs if ref]
+
+        def node(
+            node_id: str,
+            title: str,
+            *,
+            x: int,
+            y: int,
+            step_number: int | None = None,
+            node_type: str = "orchestrator_step",
+            status: str = "valid",
+            description: str = "",
+            config_refs: list[dict[str, Any] | None] | None = None,
+            metrics: list[dict[str, Any]] | None = None,
+        ) -> dict[str, Any]:
+            return {
+                "id": node_id,
+                "title": title,
+                "step_number": step_number,
+                "type": node_type,
+                "status": status,
+                "description": description,
+                "config_refs": compact_refs(config_refs or []),
+                "metrics": metrics or [],
+                "readonly": True,
+                "layout": {
+                    "x": x,
+                    "y": y,
+                },
+            }
+
+        scenario = detail.get("scenario") if detail else None
+        slot_schema = detail.get("slot_schema") if detail else None
+        profiles = detail.get("attribute_resolution_profiles", []) if detail else []
+        route = detail.get("route") if detail else None
+        policy = detail.get("orchestrator_policy") if detail else None
+        matrix = detail.get("tool_launch_matrix") if detail else None
+        launches = detail.get("tool_launches", []) if detail else []
+        prompt_pack = detail.get("prompt_pack") if detail else None
+        escalation_policy = detail.get("escalation_policy") if detail else None
+        channel = detail.get("interaction_channel") if detail else None
+        launch_tool_names = sorted({launch.get("tool_name") for launch in launches if launch.get("tool_name")})
+        launch_tools = [tool_by_name[tool_name] for tool_name in launch_tool_names if tool_name in tool_by_name]
+        endpoint_ids = sorted({
+            binding.get("endpoint_id")
+            for tool in launch_tools
+            for binding in tool.get("endpoint_bindings", [])
+            if binding.get("endpoint_id")
+        })
+        launch_endpoints = [
+            endpoint_by_id[endpoint_id]
+            for endpoint_id in endpoint_ids
+            if endpoint_id in endpoint_by_id
+        ]
+
+        return [
+            node(
+                "intake",
+                "Приём обращения",
+                x=40,
+                y=210,
+                node_type="entry",
+                description="Точка входа из канала: чат, бот, email, портал или отладочный операторский режим.",
+                config_refs=[
+                    config_ref(
+                        domain="service_scenarios",
+                        title="Сценарий",
+                        item=scenario,
+                        id_key="scenario_id",
+                        view_name="scenarios",
+                    ),
+                ],
+            ),
+            node(
+                "prompt_pack",
+                "6. Промпты",
+                x=40,
+                y=70,
+                step_number=6,
+                node_type="configuration",
+                status=item_status(prompt_pack) if detail else "valid",
+                description="Обязательные блоки системного промпта, которые направляют поведение оркестратора.",
+                config_refs=[
+                    config_ref(
+                        domain="prompt_packs",
+                        title="Пакет промптов",
+                        item=prompt_pack,
+                        id_key="prompt_pack_id",
+                        view_name="scenarioPrompts",
+                    ),
+                ],
+                metrics=[
+                    {
+                        "label": "Блоков",
+                        "value": len(prompt_pack.get("blocks", {})) if prompt_pack else 0,
+                    },
+                ] if detail else [],
+            ),
+            node(
+                "slot_filling",
+                "0. Слоты",
+                x=250,
+                y=210,
+                step_number=0,
+                status=item_status(slot_schema) if detail else "valid",
+                description="Сбор обязательных данных: один вопрос за раз, приоритет кто -> что -> когда.",
+                config_refs=[
+                    config_ref(
+                        domain="slot_schemas",
+                        title="Схема слотов",
+                        item=slot_schema,
+                        id_key="slot_schema_id",
+                        view_name="scenarioSlots",
+                    ),
+                ],
+                metrics=[
+                    {
+                        "label": "Слотов",
+                        "value": len(slot_schema.get("slots", [])) if slot_schema else 0,
+                    },
+                    {
+                        "label": "Обязательных",
+                        "value": len(slot_schema.get("required_slots", [])) if slot_schema else 0,
+                    },
+                ] if detail else [],
+            ),
+            node(
+                "attribute_resolution",
+                "1. Разрешение атрибутов",
+                x=460,
+                y=210,
+                step_number=1,
+                status="valid" if not detail or profiles else "partial",
+                description="Заполнение атрибутов через входные слоты, ReAct-операции, LLM-правило, уточнение у клиента и эскалацию оператору.",
+                config_refs=[
+                    {
+                        "domain": "attribute_resolution_profiles",
+                        "title": "Профиль разрешения",
+                        "id": profile["profile_id"],
+                        "display_name": profile.get("display_name") or profile["profile_id"],
+                        "view": "resolution",
+                    }
+                    for profile in profiles
+                ],
+                metrics=[
+                    {
+                        "label": "Профилей",
+                        "value": len(profiles),
+                    },
+                ] if detail else [],
+            ),
+            node(
+                "classification",
+                "2. Классификация и маршрут",
+                x=670,
+                y=210,
+                step_number=2,
+                status=item_status(route) if detail else "valid",
+                description="Выбор категории, приоритета и маршрута через правила, LLM и передачу оператору при низкой уверенности.",
+                config_refs=[
+                    config_ref(
+                        domain="classification_routes",
+                        title="Маршрут",
+                        item=route,
+                        id_key="route_id",
+                        view_name="scenarioClassification",
+                    ),
+                ],
+                metrics=[
+                    {
+                        "label": "Маршрут",
+                        "value": route.get("route") if route else "н/д",
+                    },
+                    {
+                        "label": "Приоритет",
+                        "value": route.get("priority") if route else "н/д",
+                    },
+                ] if detail else [],
+            ),
+            node(
+                "react_planning",
+                "3. ReAct-планирование",
+                x=880,
+                y=210,
+                step_number=3,
+                status=item_status(policy) if detail else "valid",
+                description="Цикл Думай -> Действуй -> Наблюдай со стоп-условиями и лимитом итераций.",
+                config_refs=[
+                    config_ref(
+                        domain="orchestrator_policy",
+                        title="Политика ReAct",
+                        item=policy,
+                        id_key="policy_id",
+                        view_name="scenarioReact",
+                    ),
+                ],
+                metrics=[
+                    {
+                        "label": "Итераций",
+                        "value": policy.get("max_iterations") if policy else "н/д",
+                    },
+                    {
+                        "label": "Ошибок до стопа",
+                        "value": policy.get("consecutive_tool_errors_to_escalate") if policy else "н/д",
+                    },
+                ] if detail else [],
+            ),
+            node(
+                "tool_use",
+                "4. ReAct-вызовы и матрица запуска",
+                x=1090,
+                y=210,
+                step_number=4,
+                status=item_status(matrix) if detail else "valid",
+                description="Выбор разрешенных ReAct-вызовов, уровня запуска, обязательных слотов и согласований.",
+                config_refs=[
+                    config_ref(
+                        domain="tool_launch_matrix",
+                        title="Матрица запуска",
+                        item=matrix,
+                        id_key="matrix_id",
+                        view_name="scenarioTools",
+                    ),
+                ],
+                metrics=[
+                    {
+                        "label": "Запусков",
+                        "value": len(launches),
+                    },
+                    {
+                        "label": "ReAct-вызовов",
+                        "value": len(launch_tool_names),
+                    },
+                ] if detail else [],
+            ),
+            node(
+                "endpoint_contracts",
+                "Контракты endpoint",
+                x=1090,
+                y=370,
+                node_type="configuration",
+                description="Технические endpoint-операции и привязка их ответа к результату ReAct-вызова.",
+                config_refs=[
+                    *[
+                        {
+                            "domain": "tools",
+                            "title": "ReAct-вызов",
+                            "id": tool["tool_name"],
+                            "display_name": tool.get("description") or tool["tool_name"],
+                            "view": "reactCalls",
+                        }
+                        for tool in launch_tools
+                    ],
+                    *[
+                        {
+                            "domain": "integration_endpoints",
+                            "title": "Endpoint",
+                            "id": endpoint["endpoint_id"],
+                            "display_name": endpoint.get("display_name") or endpoint["endpoint_id"],
+                            "view": "integrations",
+                        }
+                        for endpoint in launch_endpoints
+                    ],
+                ],
+                metrics=[
+                    {
+                        "label": "Endpoint",
+                        "value": len(launch_endpoints),
+                    },
+                ] if detail else [],
+            ),
+            node(
+                "decision",
+                "5. Решение и эскалация",
+                x=1300,
+                y=210,
+                step_number=5,
+                status=item_status(escalation_policy) if detail else "valid",
+                description="Финальное решение: автозакрытие, ожидание ответа клиента, эскалация оператору или Major Incident.",
+                config_refs=[
+                    config_ref(
+                        domain="escalation_policies",
+                        title="Политика решения",
+                        item=escalation_policy,
+                        id_key="policy_id",
+                        view_name="scenarioEscalation",
+                    ),
+                ],
+            ),
+            node(
+                "interaction_channel",
+                "Канал взаимодействия",
+                x=250,
+                y=370,
+                node_type="configuration",
+                status=item_status(channel) if detail else "valid",
+                description="Профиль ожидания, доставки вопросов и действия при незавершенном обсуждении.",
+                config_refs=[
+                    config_ref(
+                        domain="interaction_channels",
+                        title="Канал",
+                        item=channel,
+                        id_key="channel_id",
+                        view_name="interactionChannels",
+                    ),
+                ],
+            ),
+            node(
+                "waiting",
+                "Ожидание ответа клиента",
+                x=1510,
+                y=70,
+                node_type="terminal",
+                description="AI задал уточняющий вопрос клиенту и после ответа продолжит сценарий.",
+            ),
+            node(
+                "closed",
+                "Закрытие",
+                x=1510,
+                y=210,
+                node_type="terminal",
+                description="Условие успеха выполнено, подтверждение получено, кейс можно закрыть.",
+            ),
+            node(
+                "escalation",
+                "Эскалация оператору",
+                x=1510,
+                y=350,
+                node_type="terminal",
+                description="AI завершает самостоятельную обработку и передает оператору пакет контекста.",
+            ),
+        ]
+
+    @staticmethod
+    def _orchestration_graph_edges() -> list[dict[str, Any]]:
+        def edge(
+            source: str,
+            target: str,
+            label: str,
+            *,
+            condition: str | None = None,
+            edge_type: str = "flow",
+        ) -> dict[str, Any]:
+            return {
+                "from": source,
+                "to": target,
+                "label": label,
+                "condition": condition,
+                "type": edge_type,
+            }
+
+        return [
+            edge("intake", "slot_filling", "текст обращения"),
+            edge("prompt_pack", "slot_filling", "инструкции", edge_type="support"),
+            edge("prompt_pack", "classification", "пороги и правила", edge_type="support"),
+            edge("prompt_pack", "react_planning", "ReAct-правила", edge_type="support"),
+            edge("interaction_channel", "slot_filling", "доставка вопросов", edge_type="support"),
+            edge("slot_filling", "attribute_resolution", "нужны атрибуты"),
+            edge("attribute_resolution", "waiting", "вопрос клиенту", condition="не хватает данных", edge_type="support"),
+            edge("waiting", "slot_filling", "ответ клиента", condition="возобновить сценарий", edge_type="loop"),
+            edge("attribute_resolution", "classification", "слоты готовы"),
+            edge("classification", "react_planning", "маршрут выбран"),
+            edge("classification", "escalation", "эскалация оператору", condition="major incident или низкая уверенность"),
+            edge("react_planning", "tool_use", "выбран ReAct-вызов"),
+            edge("endpoint_contracts", "tool_use", "binding и result mapping", edge_type="support"),
+            edge("tool_use", "react_planning", "наблюдение", condition="итерация продолжается", edge_type="loop"),
+            edge("react_planning", "decision", "стоп-условие"),
+            edge("tool_use", "decision", "результат действия"),
+            edge("decision", "waiting", "ожидать клиента", condition="нет ответа клиента"),
+            edge("decision", "closed", "закрыть", condition="success + подтверждение"),
+            edge("decision", "escalation", "эскалировать оператору", condition="ошибки, лимит, confidence"),
+            edge("interaction_channel", "decision", "правила ожидания", edge_type="support"),
+        ]
 
     def system_confidence_defaults(self) -> dict[str, float]:
         policy_payload = self.active_payload("orchestrator_policy")
@@ -1670,6 +2870,342 @@ class ConfigStore:
             thresholds.update(profile_confidence_thresholds(profile))
         return thresholds
 
+    def classify_text(self, text: str, configured_route: dict[str, Any] | None) -> dict[str, Any]:
+        routes = self.active_payload("classification_routes")["routes"]
+        candidates = [
+            score_classification_route(route, text)
+            for route in routes
+        ]
+        candidates.sort(
+            key=lambda item: (
+                item["confidence"],
+                item["positive_score"],
+                -item["negative_score"],
+                item["display_name"],
+            ),
+            reverse=True,
+        )
+        selected = candidates[0] if candidates else None
+        route_by_id = {route["route_id"]: route for route in routes}
+        selected_route = route_by_id.get(selected["route_id"]) if selected else configured_route
+        top_limit = int((configured_route or {}).get("top_categories_on_low_confidence") or 3)
+        top_limit = max(1, min(top_limit, len(candidates) or 1))
+        configured_score = next(
+            (item for item in candidates if item["route_id"] == (configured_route or {}).get("route_id")),
+            None,
+        )
+        confidence = float((selected or {}).get("confidence") or 0.0)
+        decision_level = classification_decision_level(confidence, selected_route)
+        return {
+            "route_id": (selected or configured_route or {}).get("route_id"),
+            "display_name": (selected or configured_route or {}).get("display_name"),
+            "route": (selected or configured_route or {}).get("route"),
+            "priority": (selected or configured_route or {}).get("priority"),
+            "workflow_state_id": (selected or configured_route or {}).get("workflow_state_id"),
+            "confidence": confidence,
+            "decision_level": decision_level,
+            "configured_route_id": (configured_route or {}).get("route_id"),
+            "configured_route_confidence": (configured_score or {}).get("confidence"),
+            "matches_configured_route": bool(
+                selected
+                and configured_route
+                and selected["route_id"] == configured_route.get("route_id")
+            ),
+            "positive_hits": (selected or {}).get("positive_hits", []),
+            "negative_hits": (selected or {}).get("negative_hits", []),
+            "required_missing": (selected or {}).get("required_missing", []),
+            "blocked_by_rules": (selected or {}).get("blocked_by_rules", []),
+            "top_routes": candidates[:top_limit],
+        }
+
+    def _slot_candidate_value(
+        self,
+        *,
+        slot_id: str,
+        provided: dict[str, Any],
+        llm_result_by_slot: dict[str, dict[str, Any]],
+        autofill_values: dict[str, dict[str, Any]],
+        thresholds_by_slot: dict[str, dict[str, float]],
+    ) -> Any:
+        if slot_id in provided:
+            return provided[slot_id]
+        if slot_id in autofill_values:
+            return autofill_values[slot_id].get("value")
+        llm_result = llm_result_by_slot.get(slot_id)
+        if llm_result:
+            threshold = thresholds_by_slot.get(slot_id, DEFAULT_CONFIDENCE_THRESHOLDS)["min_extraction_confidence"]
+            if llm_result.get("value") is not None and llm_result.get("confidence", 0.0) >= threshold:
+                return llm_result.get("value")
+        return None
+
+    def _simulate_slot_autofill_profile(
+        self,
+        *,
+        profile: dict[str, Any],
+        provided: dict[str, Any],
+        llm_result_by_slot: dict[str, dict[str, Any]],
+        autofill_values: dict[str, dict[str, Any]],
+        thresholds_by_slot: dict[str, dict[str, float]],
+        simulation_options: dict[str, Any],
+        execution_trace: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        tool_by_name = self._by_id(self.active_payload("tools")["tools"], "tool_name")
+        endpoint_by_id = self._by_id(
+            self.active_payload("integration_endpoints")["endpoints"],
+            "endpoint_id",
+        )
+        tool = tool_by_name.get(profile.get("react_call", ""))
+        binding = (tool or {}).get("endpoint_bindings", [None])[0]
+        endpoint_id = (binding or {}).get("endpoint_id")
+        operation_id = (binding or {}).get("operation_id")
+        endpoint = endpoint_by_id.get(endpoint_id or "")
+        operation = (endpoint or {}).get("operations", {}).get(operation_id or "")
+        default_result = {
+            "profile_id": profile["profile_id"],
+            "profile_name": profile["display_name"],
+            "react_call": profile.get("react_call"),
+            "status": "pending",
+            "output_values": {},
+            "filled_slots": [],
+            "missing_parameters": [],
+            "missing_required_result_fields": [],
+            "missing_required_slots": [],
+            "result_summary": None,
+            "reason": "",
+        }
+        if not tool or not binding or not endpoint or not operation:
+            append_trace(
+                execution_trace,
+                step="1",
+                status="blocked",
+                title=f"Автозаполнение слотов: {profile['display_name']}",
+                message="ReAct-вызов или его привязка к endpoint-операции не найдены.",
+                details={"react_call": profile.get("react_call"), "endpoint_id": endpoint_id, "operation_id": operation_id},
+            )
+            return {**default_result, "status": "blocked_by_configuration", "reason": "ReAct-вызов автозаполнения не настроен."}
+        if tool.get("action_type") != "read_only":
+            append_trace(
+                execution_trace,
+                step="1",
+                status="blocked",
+                title=f"Автозаполнение слотов: {profile['display_name']}",
+                message="Автозаполнение допускает только read-only ReAct-вызовы.",
+            )
+            return {**default_result, "status": "blocked_by_configuration", "reason": "ReAct-вызов не является read-only."}
+
+        adapter_type = endpoint.get("adapter_type")
+        if adapter_type == "mock" and not simulation_options["allow_mock_integrations"]:
+            append_trace(
+                execution_trace,
+                step="1",
+                status="skipped",
+                title=f"Автозаполнение слотов: {profile['display_name']}",
+                message="Mock-интеграции выключены в выбранном режиме тестового прогона.",
+                details={"endpoint_id": endpoint_id, "operation_id": operation_id},
+            )
+            return {**default_result, "status": "skipped", "reason": "Mock-интеграции выключены в выбранном режиме тестового прогона."}
+        if adapter_type != "mock" and not simulation_options["allow_readonly_integrations"]:
+            append_trace(
+                execution_trace,
+                step="1",
+                status="skipped",
+                title=f"Автозаполнение слотов: {profile['display_name']}",
+                message="Внешние read-only интеграции выключены в выбранном режиме тестового прогона.",
+                details={"endpoint_id": endpoint_id, "operation_id": operation_id},
+            )
+            return {**default_result, "status": "skipped", "reason": "Read-only интеграции выключены в выбранном режиме тестового прогона."}
+
+        parameters: dict[str, Any] = {}
+        missing_parameters: list[str] = []
+        required_parameters = set(tool.get("parameters_schema", {}).get("required", []))
+        for parameter, source_ref in profile.get("input_mapping", {}).items():
+            source, separator, source_value = str(source_ref).partition(":")
+            if separator != ":":
+                continue
+            value: Any = None
+            if source == "slot":
+                value = self._slot_candidate_value(
+                    slot_id=source_value,
+                    provided=provided,
+                    llm_result_by_slot=llm_result_by_slot,
+                    autofill_values=autofill_values,
+                    thresholds_by_slot=thresholds_by_slot,
+                )
+            elif source in {"case", "context"}:
+                value = f"{source}:{source_value}"
+            elif source == "constant":
+                value = source_value
+            elif source == "secret":
+                value = "секрет скрыт"
+            if value in (None, "") and parameter in required_parameters:
+                missing_parameters.append(parameter)
+            elif value not in (None, ""):
+                parameters[parameter] = value
+
+        if missing_parameters:
+            append_trace(
+                execution_trace,
+                step="1",
+                status="blocked",
+                title=f"Автозаполнение слотов: {profile['display_name']}",
+                message=f"Не заполнены обязательные параметры ReAct-вызова: {', '.join(missing_parameters)}.",
+                details={
+                    "react_call": profile.get("react_call"),
+                    "endpoint_id": endpoint_id,
+                    "operation_id": operation_id,
+                    "parameters": parameters,
+                    "missing_parameters": missing_parameters,
+                    "result": {"status": "not_executed", "reason": "Не заполнены обязательные параметры ReAct-вызова."},
+                },
+            )
+            return {
+                **default_result,
+                "status": "missing_parameters",
+                "missing_parameters": missing_parameters,
+                "reason": "Не заполнены обязательные параметры ReAct-вызова автозаполнения.",
+            }
+
+        mock_output = copy.deepcopy(operation.get("mock_output") or {})
+        if not mock_output:
+            append_trace(
+                execution_trace,
+                step="1",
+                status="blocked",
+                title=f"Автозаполнение слотов: {profile['display_name']}",
+                message="В dry-run нет mock_output для ReAct-вызова автозаполнения.",
+                details={
+                    "react_call": profile.get("react_call"),
+                    "endpoint_id": endpoint_id,
+                    "operation_id": operation_id,
+                    "parameters": parameters,
+                    "result": {"status": "not_executed", "reason": "Для endpoint-операции не задан mock_output."},
+                },
+            )
+            return {**default_result, "status": "blocked_by_configuration", "reason": "Нет mock_output для dry-run."}
+
+        candidate_count = mock_output.get("candidate_count")
+        if candidate_count is None:
+            candidate_count = 1 if mock_output else 0
+        accept_policy = profile.get("accept_policy", "single_result")
+        if accept_policy == "single_result" and candidate_count != 1:
+            reason = "Операция не вернула результатов." if candidate_count == 0 else "Операция вернула несколько результатов."
+            append_trace(
+                execution_trace,
+                step="1",
+                status="blocked",
+                title=f"Автозаполнение слотов: {profile['display_name']}",
+                message=reason,
+                details={
+                    "react_call": profile.get("react_call"),
+                    "endpoint_id": endpoint_id,
+                    "operation_id": operation_id,
+                    "parameters": parameters,
+                    "result": mock_output,
+                    "candidate_count": candidate_count,
+                },
+            )
+            return {
+                **default_result,
+                "status": "ambiguous" if candidate_count > 1 else "no_result",
+                "result_summary": {"candidate_count": candidate_count, "source": f"{endpoint_id}/{operation_id}"},
+                "reason": reason,
+            }
+
+        output_values = {}
+        filled_slot_values = []
+        missing_required_result_fields = []
+        for item in profile.get("output_mapping", []):
+            value = value_at_path(mock_output, item["result_field"])
+            if is_missing_autofill_value(value):
+                if item.get("required_for_success"):
+                    missing_required_result_fields.append(
+                        {
+                            "result_field": item["result_field"],
+                            "target_slot": item["target_slot"],
+                        }
+                    )
+                continue
+            else:
+                output_values[item["target_slot"]] = value
+                filled_slot_values.append(
+                    {
+                        "result_field": item["result_field"],
+                        "target_slot": item["target_slot"],
+                        "value": value,
+                    }
+                )
+        if missing_required_result_fields:
+            missing_slots = sorted({item["target_slot"] for item in missing_required_result_fields})
+            append_trace(
+                execution_trace,
+                step="1",
+                status="blocked",
+                title=f"Автозаполнение слотов: {profile['display_name']}",
+                message="Не вернулись обязательные для профиля поля результата.",
+                details={
+                    "react_call": profile.get("react_call"),
+                    "endpoint_id": endpoint_id,
+                    "operation_id": operation_id,
+                    "parameters": parameters,
+                    "result": mock_output,
+                    "output_values": output_values,
+                    "filled_slot_values": filled_slot_values,
+                    "missing_required_result_fields": missing_required_result_fields,
+                    "output_slots": sorted(output_values),
+                    "candidate_count": candidate_count,
+                },
+            )
+            return {
+                **default_result,
+                "status": "missing_required_result_field",
+                "output_values": output_values,
+                "filled_slot_values": filled_slot_values,
+                "filled_slots": sorted(output_values),
+                "missing_required_result_fields": missing_required_result_fields,
+                "missing_required_slots": missing_slots,
+                "result_summary": {"candidate_count": candidate_count, "source": f"{endpoint_id}/{operation_id}"},
+                "reason": "Не вернулись поля результата, обязательные для успешного автозаполнения профиля.",
+            }
+        filled_summary = "; ".join(
+            f"{item['target_slot']} = {compact_trace_value(item['value'])} (из {item['result_field']})"
+            for item in filled_slot_values
+        )
+        append_trace(
+            execution_trace,
+            step="1",
+            status="completed" if output_values else "blocked",
+            title=f"Автозаполнение слотов: {profile['display_name']}",
+            message=(
+                f"ReAct-вызов {profile.get('react_call')} заполнил: {filled_summary}."
+                if filled_summary
+                else f"ReAct-вызов {profile.get('react_call')} не заполнил слоты."
+            ),
+            details={
+                "react_call": profile.get("react_call"),
+                "endpoint_id": endpoint_id,
+                "operation_id": operation_id,
+                "parameters": parameters,
+                "result": mock_output,
+                "output_values": output_values,
+                "filled_slot_values": filled_slot_values,
+                "output_slots": sorted(output_values),
+                "candidate_count": candidate_count,
+            },
+        )
+        return {
+            **default_result,
+            "status": "filled" if output_values else "no_result",
+            "output_values": output_values,
+            "filled_slot_values": filled_slot_values,
+            "filled_slots": sorted(output_values),
+            "result_summary": {"candidate_count": candidate_count, "source": f"{endpoint_id}/{operation_id}"},
+            "reason": (
+                "Значения получены из детерминированного ReAct-автозаполнения."
+                if output_values
+                else "Операция не вернула значений для выбранных слотов."
+            ),
+        }
+
     def simulate_attribute_resolution_profile(
         self,
         *,
@@ -1679,11 +3215,10 @@ class ConfigStore:
         simulation_options: dict[str, Any],
         effective_thresholds: dict[str, float],
         execution_trace: list[dict[str, Any]],
+        slot_values: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        candidate_source = profile["candidate_source"]
-        result_policy = profile["result_policy"]
-        decision_policy = profile["decision_policy"]
-        source_type = candidate_source["source_type"]
+        enrichment_steps = profile.get("enrichment_steps", [])
+        human_policy = profile["human_resolution_policy"]
         question = resolution_profile_question(profile)
         default_result = {
             "profile_id": profile["profile_id"],
@@ -1693,145 +3228,226 @@ class ConfigStore:
             "attempt": 1,
             "max_attempts": profile["max_attempts"],
             "pending_question": question,
-            "input_attributes": profile.get("input_attributes", []),
-            "candidate_source": candidate_source,
-            "result_policy": result_policy,
-            "decision_policy": decision_policy,
-            "clarification_policy": profile["clarification_policy"],
-            "handoff_policy": profile["handoff_policy"],
+            "input_slots": profile.get("input_slots", []),
+            "enrichment_steps": enrichment_steps,
+            "enrichment_entities": {},
+            "output_slots_order": profile.get("output_slots_order", []),
+            "llm_resolution_script": profile.get("llm_resolution_script", {}),
+            "human_resolution_policy": human_policy,
             "candidate_count": None,
             "result_summary": None,
+            "llm_decision": None,
             "output_values": {},
             "effective_confidence_thresholds": effective_thresholds,
         }
-        if source_type != "react_call":
+        if not enrichment_steps:
             append_trace(
                 execution_trace,
                 step="1",
                 status="skipped",
                 title=f"Разрешение атрибута: {profile['display_name']}",
-                message="Операция разрешения атрибута не является ReAct-вызовом и в dry-run не исполняется.",
-                details={"source_type": source_type},
+                message="Для профиля не настроено обогащение контекста через ReAct-вызовы.",
+                details={"enrichment_steps": 0},
             )
             return {
                 **default_result,
-                "reason": "Операция разрешения атрибута не исполняется в выбранном режиме тестового прогона.",
+                "reason": "Обогащение контекста не настроено для выбранного профиля.",
             }
 
-        endpoint_id = candidate_source.get("endpoint_id")
-        operation_id = candidate_source.get("operation_id")
-        endpoint = self._by_id(
+        endpoint_by_id = self._by_id(
             self.active_payload("integration_endpoints")["endpoints"],
             "endpoint_id",
-        ).get(endpoint_id or "")
-        operation = (endpoint or {}).get("operations", {}).get(operation_id or "")
-        adapter_type = (endpoint or {}).get("adapter_type")
-        if not endpoint or not operation:
+        )
+        tool_by_name = self._by_id(self.active_payload("tools")["tools"], "tool_name")
+        enrichment_entities: dict[str, Any] = {}
+        last_step: dict[str, Any] | None = None
+        last_mock_output: dict[str, Any] | None = None
+        last_endpoint_id = ""
+        last_operation_id = ""
+
+        for step_index, enrichment_step in enumerate(enrichment_steps, start=1):
+            tool_name = enrichment_step.get("react_call")
+            tool = tool_by_name.get(tool_name or "")
+            binding = (tool or {}).get("endpoint_bindings", [None])[0]
+            endpoint_id = (binding or {}).get("endpoint_id")
+            operation_id = (binding or {}).get("operation_id")
+            endpoint = endpoint_by_id.get(endpoint_id or "")
+            operation = (endpoint or {}).get("operations", {}).get(operation_id or "")
+            adapter_type = (endpoint or {}).get("adapter_type")
+            if not tool or not binding or not endpoint or not operation:
+                append_trace(
+                    execution_trace,
+                    step="1",
+                    status="blocked",
+                    title=f"Обогащение контекста: {enrichment_step.get('step_name') or profile['display_name']}",
+                    message="ReAct-вызов или его привязка к endpoint-операции не найдены.",
+                    details={"react_call": tool_name, "endpoint_id": endpoint_id, "operation_id": operation_id},
+                )
+                return {
+                    **default_result,
+                    "enrichment_entities": enrichment_entities,
+                    "status": "blocked_by_configuration",
+                    "decision": "handoff",
+                    "reason": "ReAct-вызов обогащения контекста или его привязка не найдены.",
+                }
+            parameter_sources = enrichment_step.get("parameter_mapping", {})
+            parameters = resolved_dry_run_parameters(
+                parameter_sources,
+                provided=provided,
+                slot_values=slot_values,
+                enrichment_entities=enrichment_entities,
+            )
+            if adapter_type == "mock" and not simulation_options["allow_mock_integrations"]:
+                append_trace(
+                    execution_trace,
+                    step="1",
+                    status="skipped",
+                    title=f"Обогащение контекста: {enrichment_step.get('step_name') or profile['display_name']}",
+                    message="Mock-интеграции выключены в выбранном режиме тестового прогона.",
+                    details={
+                        "react_call": tool_name,
+                        "endpoint_id": endpoint_id,
+                        "operation_id": operation_id,
+                        "parameter_sources": parameter_sources,
+                        "parameters": parameters,
+                        "result": {"status": "not_executed", "reason": "Mock-интеграции выключены в выбранном режиме."},
+                    },
+                )
+                return {
+                    **default_result,
+                    "enrichment_entities": enrichment_entities,
+                    "reason": "Mock-интеграции выключены в выбранном режиме тестового прогона.",
+                }
+            if adapter_type != "mock" and not simulation_options["allow_readonly_integrations"]:
+                append_trace(
+                    execution_trace,
+                    step="1",
+                    status="skipped",
+                    title=f"Обогащение контекста: {enrichment_step.get('step_name') or profile['display_name']}",
+                    message="Внешние read-only интеграции выключены в выбранном режиме тестового прогона.",
+                    details={
+                        "react_call": tool_name,
+                        "endpoint_id": endpoint_id,
+                        "operation_id": operation_id,
+                        "parameter_sources": parameter_sources,
+                        "parameters": parameters,
+                        "result": {"status": "not_executed", "reason": "Read-only интеграции выключены в выбранном режиме."},
+                    },
+                )
+                return {
+                    **default_result,
+                    "enrichment_entities": enrichment_entities,
+                    "reason": "Внешние read-only интеграции выключены в выбранном режиме тестового прогона.",
+                }
+
+            mock_output = copy.deepcopy(operation.get("mock_output") or {})
+            if not mock_output:
+                append_trace(
+                    execution_trace,
+                    step="1",
+                    status="blocked",
+                    title=f"Обогащение контекста: {enrichment_step.get('step_name') or profile['display_name']}",
+                    message="В dry-run нет mock_output для ReAct-вызова обогащения контекста.",
+                    details={
+                        "react_call": tool_name,
+                        "endpoint_id": endpoint_id,
+                        "operation_id": operation_id,
+                        "parameter_sources": parameter_sources,
+                        "parameters": parameters,
+                        "result": {"status": "not_executed", "reason": "Для endpoint-операции не задан mock_output."},
+                    },
+                )
+                return {
+                    **default_result,
+                    "enrichment_entities": enrichment_entities,
+                    "status": "blocked_by_configuration",
+                    "decision": "handoff",
+                    "reason": "В dry-run нет mock_output для ReAct-вызова обогащения контекста.",
+                }
+
+            entity_name = enrichment_step["result_entity_name"]
+            enrichment_entities[entity_name] = {
+                "step_name": enrichment_step.get("step_name"),
+                "react_call": tool_name,
+                "endpoint_id": endpoint_id,
+                "operation_id": operation_id,
+                "result": mock_output,
+            }
+            append_trace(
+                execution_trace,
+                step="1",
+                status="completed",
+                title=f"Обогащение контекста: {enrichment_step.get('step_name') or entity_name}",
+                message=f"ReAct-вызов {tool_name} сохранил результат как {entity_name}.",
+                details={
+                    "step_index": step_index,
+                    "react_call": tool_name,
+                    "endpoint_id": endpoint_id,
+                    "operation_id": operation_id,
+                    "parameter_sources": parameter_sources,
+                    "parameters": parameters,
+                    "result": mock_output,
+                    "result_entity_name": entity_name,
+                },
+            )
+            last_step = enrichment_step
+            last_mock_output = mock_output
+            last_endpoint_id = endpoint_id or ""
+            last_operation_id = operation_id or ""
+
+        if not last_step or last_mock_output is None:
             append_trace(
                 execution_trace,
                 step="1",
                 status="blocked",
                 title=f"Разрешение атрибута: {profile['display_name']}",
-                message="Операция разрешения атрибута не найдена в каталоге подключений.",
-                details={"endpoint_id": endpoint_id, "operation_id": operation_id},
+                message="Обогащение контекста не вернуло результата.",
+                details={"enrichment_steps": len(enrichment_steps)},
             )
             return {
                 **default_result,
+                "enrichment_entities": enrichment_entities,
                 "status": "blocked_by_configuration",
-                "decision": decision_policy["source_error"],
-                "reason": "Операция разрешения атрибута не найдена в каталоге подключений.",
-            }
-        if adapter_type == "mock" and not simulation_options["allow_mock_integrations"]:
-            append_trace(
-                execution_trace,
-                step="1",
-                status="skipped",
-                title=f"Разрешение атрибута: {profile['display_name']}",
-                message="Mock-интеграции выключены в выбранном режиме тестового прогона.",
-                details={"endpoint_id": endpoint_id, "operation_id": operation_id},
-            )
-            return {
-                **default_result,
-                "reason": "Mock-интеграции выключены в выбранном режиме тестового прогона.",
-            }
-        if adapter_type != "mock" and not simulation_options["allow_readonly_integrations"]:
-            append_trace(
-                execution_trace,
-                step="1",
-                status="skipped",
-                title=f"Разрешение атрибута: {profile['display_name']}",
-                message="Внешние read-only интеграции выключены в выбранном режиме тестового прогона.",
-                details={"endpoint_id": endpoint_id, "operation_id": operation_id},
-            )
-            return {
-                **default_result,
-                "reason": "Внешние read-only интеграции выключены в выбранном режиме тестового прогона.",
+                "decision": "handoff",
+                "reason": "Обогащение контекста не вернуло результата.",
             }
 
-        mock_output = copy.deepcopy(operation.get("mock_output") or {})
-        if not mock_output:
-            append_trace(
-                execution_trace,
-                step="1",
-                status="blocked",
-                title=f"Разрешение атрибута: {profile['display_name']}",
-                message="В dry-run нет mock_output для операции разрешения атрибута.",
-                details={"endpoint_id": endpoint_id, "operation_id": operation_id},
-            )
-            return {
-                **default_result,
-                "status": "blocked_by_configuration",
-                "decision": decision_policy["source_error"],
-                "reason": "В dry-run нет mock_output для операции разрешения атрибута.",
+        result_entity = result_entity_from_enrichment_step(last_step)
+        count, result_item, result_summary = operation_response_items(last_mock_output, result_entity)
+        confidence = result_confidence(result_item, {"confidence_path": "confidence"})
+        if not simulation_options["allow_llm"]:
+            llm_decision = {
+                "decision": "await_llm_rule",
+                "status": "llm_resolution_pending",
+                "filled_slots": {},
+                "confidence": confidence,
+                "next_question": question or human_policy["clarification_question"],
+                "reason": "Режим тестового прогона не разрешает выполнение LLM-правила разрешения атрибута.",
             }
-
-        count, result_item, result_summary = result_items_from_operation_response(mock_output, result_policy)
-        confidence = result_confidence(result_item, result_policy)
-        if count == 0:
-            decision = decision_policy["empty_result"]
-        elif count == 1:
-            decision = decision_policy["single_result"]
         else:
-            decision = decision_policy["multiple_results"]
-
-        output_values = {}
-        status = "question_required"
-        reason = "Матрица решений требует уточнения."
-        if decision == "auto_fill_if_confident" and count == 1:
-            if confidence >= effective_thresholds["auto_accept_confidence"]:
-                status = "filled"
-                reason = "Операция вернула единственный результат с достаточной уверенностью."
-                target_value = result_value(result_item, result_policy, profile["target_slot_id"])
-                if target_value is not None:
-                    output_values[profile["target_slot_id"]] = target_value
-                for slot_id, path in result_policy.get("output_mapping", {}).items():
-                    mapped_value = value_at_path(result_item, path)
-                    if mapped_value is not None:
-                        output_values[slot_id] = mapped_value
-            else:
-                status = "question_required"
-                decision = "ask_clarification"
-                reason = "Единственный результат ниже порога автозаполнения."
-        elif decision in {"operator_handoff", "escalate", "debug_stop"}:
-            status = "operator_handoff"
-            reason = "Матрица решений требует передачи человеку."
-        elif decision == "leave_empty":
-            status = "resolution_pending"
-            reason = "Матрица решений оставляет атрибут пустым."
+            llm_decision = simulated_llm_resolution_decision(
+                profile=profile,
+                result_item=result_item,
+                count=count,
+                confidence=confidence,
+                effective_thresholds=effective_thresholds,
+            )
+        output_values = llm_decision.get("filled_slots", {})
+        status = llm_decision.get("status", "question_required")
+        decision = llm_decision.get("decision", "ask_clarification")
+        reason = llm_decision.get("reason", "")
 
         append_trace(
             execution_trace,
             step="1",
             status="completed" if status == "filled" else "blocked",
             title=f"Разрешение атрибута: {profile['display_name']}",
-            message=f"Результатов операции: {count}; решение: {decision}.",
+            message=f"Результатов обогащения: {count}; решение LLM-правила: {decision}.",
             details={
-                "candidate_source": {
-                    "tool_name": candidate_source.get("tool_name"),
-                    "endpoint_id": endpoint_id,
-                    "operation_id": operation_id,
-                },
+                "enrichment_steps": len(enrichment_steps),
+                "entity_name": result_entity.get("entity_name"),
                 "confidence": confidence,
+                "result": llm_decision,
                 "output_slots": sorted(output_values),
             },
         )
@@ -1841,11 +3457,14 @@ class ConfigStore:
             "decision": decision,
             "candidate_count": count,
             "candidate_confidence": confidence,
+            "enrichment_entities": enrichment_entities,
             "output_values": output_values,
+            "llm_decision": llm_decision,
+            "pending_question": llm_decision.get("next_question") or question,
             "result_summary": {
                 **result_summary,
                 "count": count,
-                "source": f"{endpoint_id}/{operation_id}",
+                "source": f"{last_endpoint_id}/{last_operation_id}",
             },
             "reason": reason,
         }
@@ -1926,6 +3545,8 @@ class ConfigStore:
                         "model": model_result.get("model"),
                         "duration_ms": model_result.get("duration_ms"),
                         "usage": model_result.get("usage", {}),
+                        "parameters": {"slot_ids": [slot["slot_id"] for slot in llm_slots]},
+                        "result": llm_result_by_slot,
                     },
                 )
             else:
@@ -1951,6 +3572,39 @@ class ConfigStore:
                 message="Режим тестового прогона не разрешает вызов LLM.",
                 details={"slot_ids": [slot["slot_id"] for slot in llm_slots]},
             )
+        thresholds_by_slot = {}
+        for slot in slot_schema["slots"]:
+            fill_method = slot_fill_method(slot)
+            profile = profile_by_id.get(slot.get("resolution_profile_id", ""))
+            thresholds_by_slot[slot["slot_id"]] = self.effective_confidence_thresholds(
+                scenario=detail["scenario"],
+                slot=slot,
+                profile=profile,
+                include_profile=fill_method == "resolution_profile",
+            )
+        autofill_values: dict[str, dict[str, Any]] = {}
+        slot_autofill_steps = []
+        for profile in sorted(detail.get("slot_autofill_profiles", []), key=lambda item: item.get("run_order", 999)):
+            profile_result = self._simulate_slot_autofill_profile(
+                profile=profile,
+                provided=provided,
+                llm_result_by_slot=llm_result_by_slot,
+                autofill_values=autofill_values,
+                thresholds_by_slot=thresholds_by_slot,
+                simulation_options=simulation_options,
+                execution_trace=execution_trace,
+            )
+            slot_autofill_steps.append(profile_result)
+            for slot_id, value in profile_result.get("output_values", {}).items():
+                if slot_id in provided:
+                    continue
+                autofill_values[slot_id] = {
+                    "value": value,
+                    "profile_id": profile["profile_id"],
+                    "profile_name": profile["display_name"],
+                    "react_call": profile.get("react_call"),
+                    "reason": profile_result.get("reason"),
+                }
         slot_values = {}
         missing_slots = []
         resolution_steps = []
@@ -1983,6 +3637,19 @@ class ConfigStore:
                     title=f"Слот {slot_id}",
                     message="Значение предоставлено оператором.",
                 )
+            elif slot_id in autofill_values:
+                autofill_value = autofill_values[slot_id]
+                slot_values[slot_id] = {
+                    "status": "filled_by_slot_autofill",
+                    "value": autofill_value.get("value"),
+                    "fill_method": fill_method,
+                    "source": "slot_autofill",
+                    "slot_autofill_profile_id": autofill_value.get("profile_id"),
+                    "react_call": autofill_value.get("react_call"),
+                    "reason": autofill_value.get("reason"),
+                    "effective_confidence_thresholds": effective_thresholds,
+                    **slot_source_summary(slot),
+                }
             elif fill_method == "resolution_profile":
                 profile_id = profile["profile_id"] if profile else slot.get("resolution_profile_id")
                 profile_result = None
@@ -1995,6 +3662,7 @@ class ConfigStore:
                             simulation_options=simulation_options,
                             effective_thresholds=effective_thresholds,
                             execution_trace=execution_trace,
+                            slot_values=slot_values,
                         )
                     profile_result = profile_results[profile["profile_id"]]
 
@@ -2125,21 +3793,28 @@ class ConfigStore:
                 }
                 missing_slots.append(slot_id)
         route = detail["route"]
-        keywords = route.get("rules", {}).get("keywords", []) if route else []
-        lowered_text = text.lower()
-        keyword_hits = [
-            keyword
-            for keyword in keywords
-            if keyword.lower() in lowered_text
-        ]
-        confidence = 0.92 if keyword_hits else 0.68
+        classification = self.classify_text(text, route)
+        confidence = classification["confidence"]
+        positive_hit_texts = [item["text"] for item in classification.get("positive_hits", [])]
+        negative_hit_texts = [item["text"] for item in classification.get("negative_hits", [])]
         append_trace(
             execution_trace,
             step="2",
             status="completed",
             title="Классификация правилами",
-            message=f"Confidence {confidence}; совпадения: {', '.join(keyword_hits) if keyword_hits else 'нет'}.",
-            details={"route_id": route["route_id"] if route else None, "keyword_hits": keyword_hits},
+            message=(
+                f"Маршрут {classification.get('display_name') or classification.get('route_id')}; "
+                f"confidence {confidence}; уровень: {classification['decision_level']}; "
+                f"позитивные совпадения: {', '.join(positive_hit_texts) if positive_hit_texts else 'нет'}; "
+                f"негативные совпадения: {', '.join(negative_hit_texts) if negative_hit_texts else 'нет'}."
+            ),
+            details={
+                "route_id": classification.get("route_id"),
+                "configured_route_id": classification.get("configured_route_id"),
+                "matches_configured_route": classification.get("matches_configured_route"),
+                "positive_hits": positive_hit_texts,
+                "negative_hits": negative_hit_texts,
+            },
         )
         next_question = None
         for slot_id in slot_schema.get("question_order", []):
@@ -2156,7 +3831,7 @@ class ConfigStore:
                 execution_trace,
                 step="1",
                 status="question_required",
-                title="Следующий вопрос",
+                title="Уточнение у клиента",
                 message=next_question,
             )
         ready_launches = []
@@ -2233,10 +3908,15 @@ class ConfigStore:
                     title=f"ReAct-вызов {launch['tool_name']}",
                     message="; ".join(block_reasons),
                     details={
+                        "react_call": launch["tool_name"],
+                        "endpoint_id": launch.get("endpoint_id"),
+                        "operation_id": launch.get("operation_id"),
                         "launch_id": launch["launch_id"],
+                        "parameters": parameters,
                         "missing_slots": missing_for_launch,
                         "unknown_required_slots": unknown_required_slots,
                         "missing_parameter_slots": missing_parameter_slots,
+                        "result": {"status": "not_executed", "reason": "Вызов заблокирован условиями тестового прогона."},
                     },
                 )
                 blocked_launches.append(launch_summary)
@@ -2257,7 +3937,14 @@ class ConfigStore:
                         status="approval_required",
                         title=f"ReAct-вызов {launch['tool_name']}",
                         message="Action-вызов подготовлен и требует подтверждения оператора.",
-                        details={"launch_id": launch["launch_id"], "parameters": parameters},
+                        details={
+                            "react_call": launch["tool_name"],
+                            "endpoint_id": launch.get("endpoint_id"),
+                            "operation_id": launch.get("operation_id"),
+                            "launch_id": launch["launch_id"],
+                            "parameters": parameters,
+                            "result": {"status": "approval_required"},
+                        },
                     )
                 else:
                     launch_summary["status"] = "ready"
@@ -2267,7 +3954,14 @@ class ConfigStore:
                         status="ready",
                         title=f"ReAct-вызов {launch['tool_name']}",
                         message="Вызов готов в выбранном режиме тестового прогона.",
-                        details={"launch_id": launch["launch_id"], "parameters": parameters},
+                        details={
+                            "react_call": launch["tool_name"],
+                            "endpoint_id": launch.get("endpoint_id"),
+                            "operation_id": launch.get("operation_id"),
+                            "launch_id": launch["launch_id"],
+                            "parameters": parameters,
+                            "result": {"status": "prepared", "reason": "Вызов не исполнялся, только подготовлен в dry-run."},
+                        },
                     )
                 ready_launches.append(launch_summary)
         interaction_channel = detail.get("interaction_channel") or {}
@@ -2287,6 +3981,60 @@ class ConfigStore:
             final_decision = "waiting_operator_approval"
         else:
             final_decision = "ready_for_react"
+        client_question = {
+            "required": bool(next_question),
+            "question": next_question,
+            "delivery": interaction_channel.get("question_delivery"),
+            "waiting_policy": interaction_channel.get("waiting_policy"),
+            "resume_after_answer": bool(next_question),
+            "semantic": "client_clarification",
+        }
+        operator_escalation_required = (
+            final_decision == "blocked_by_configuration"
+            or classification.get("decision_level") == "human_required"
+            or classification.get("route") in {"human_review", "major_incident"}
+        )
+        operator_escalation_reason = None
+        if operator_escalation_required:
+            if final_decision == "blocked_by_configuration":
+                operator_escalation_reason = "Конфигурация или параметры ReAct-вызова не позволяют продолжить автообработку."
+            elif classification.get("route") == "major_incident":
+                operator_escalation_reason = "Маршрут требует немедленной обработки как Major Incident."
+            elif classification.get("decision_level") == "human_required":
+                operator_escalation_reason = "Уверенность классификации ниже порога самостоятельного решения."
+            else:
+                operator_escalation_reason = "Маршрут требует участия оператора."
+        escalation_action = standard_profile.get("action") or interaction_channel.get("escalation_action")
+        escalation_policy = detail.get("escalation_policy") or {}
+        escalation_package = {
+            "policy_id": escalation_policy.get("policy_id"),
+            "package_items": escalation_policy.get("handoff_package", []),
+            "slots": {
+                slot_id: slot_value.get("value")
+                for slot_id, slot_value in slot_values.items()
+            },
+            "missing_slots": missing_slots,
+            "classification": {
+                "route_id": classification.get("route_id"),
+                "route": classification.get("route"),
+                "priority": classification.get("priority"),
+                "confidence": classification.get("confidence"),
+                "decision_level": classification.get("decision_level"),
+            },
+            "blocked_tool_launches": blocked_launches,
+            "ready_tool_launches": ready_launches,
+            "user_notification": escalation_policy.get("user_notification_template"),
+        }
+        operator_escalation = {
+            "required": operator_escalation_required,
+            "reason": operator_escalation_reason,
+            "event_type": "standard_handoff",
+            "channel_id": interaction_channel.get("channel_id"),
+            "channel_name": interaction_channel.get("display_name"),
+            "action": escalation_action,
+            "package": escalation_package if operator_escalation_required else None,
+            "semantic": "operator_escalation",
+        }
         return {
             "schema_version": "1.0",
             "scenario_id": scenario_id,
@@ -2298,19 +4046,19 @@ class ConfigStore:
             "question_delivery": interaction_channel.get("question_delivery"),
             "waiting_policy": interaction_channel.get("waiting_policy"),
             "incomplete_discussion_action": interaction_channel.get("incomplete_discussion_action"),
-            "escalation_action": standard_profile.get("action") or interaction_channel.get("escalation_action"),
+            "escalation_action": escalation_action,
             "slot_values": slot_values,
             "missing_slots": missing_slots,
             "next_question": next_question,
+            "next_client_question": next_question,
+            "client_question": client_question,
+            "awaiting_client_response": bool(next_question),
+            "operator_escalation": operator_escalation,
+            "escalation_package": escalation_package if operator_escalation_required else None,
+            "slot_autofill": slot_autofill_steps,
             "attribute_resolution": resolution_steps,
             "resolution_state": resolution_state,
-            "classification": {
-                "route_id": route["route_id"] if route else None,
-                "route": route["route"] if route else None,
-                "priority": route["priority"] if route else None,
-                "confidence": confidence,
-                "keyword_hits": keyword_hits,
-            },
+            "classification": classification,
             "ready_tool_launches": ready_launches,
             "blocked_tool_launches": blocked_launches,
             "next_allowed_actions": next_allowed_actions,
@@ -2633,6 +4381,8 @@ class ConfigStore:
             return self._validate_interaction_channels(payload)
         if domain == "attribute_resolution_profiles":
             return self._validate_attribute_resolution_profiles(payload)
+        if domain == "slot_autofill_profiles":
+            return self._validate_slot_autofill_profiles(payload)
         if domain == "model_routing":
             return self._validate_model_routing(payload)
         if domain == "service_scenarios":
@@ -2664,6 +4414,16 @@ class ConfigStore:
 
         for tool in payload["tools"]:
             tool_name = tool["tool_name"]
+            if tool.get("contract_status") == "broken":
+                refs = tool_usage_refs(
+                    tool_name,
+                    self.active_payload("tool_launch_matrix"),
+                    self.active_payload("attribute_resolution_profiles"),
+                    self.active_payload("interaction_channels"),
+                    self.active_payload("slot_autofill_profiles"),
+                )
+                if refs:
+                    errors.append(f"{tool_name} имеет contract_status=broken и используется: {', '.join(refs)}.")
             for schema_key in ("parameters_schema", "result_schema"):
                 try:
                     Draft202012Validator.check_schema(tool[schema_key])
@@ -2701,13 +4461,43 @@ class ConfigStore:
             for endpoint in payload["endpoints"]
         }
         for endpoint in payload["endpoints"]:
+            if endpoint.get("enabled") and endpoint.get("adapter_type") not in {"mock", "n8n_webhook"}:
+                errors.append(
+                    f"{endpoint['endpoint_id']} adapter_type={endpoint['adapter_type']} пока не исполняется; "
+                    "включенными могут быть только mock или n8n_webhook."
+                )
             for operation_id, operation in endpoint["operations"].items():
+                if operation.get("contract_status") == "broken":
+                    refs = endpoint_operation_usage_refs(
+                        endpoint["endpoint_id"],
+                        operation_id,
+                        self.active_payload("tools"),
+                        self.active_payload("n8n_workflows"),
+                    )
+                    if refs:
+                        errors.append(
+                            f"{endpoint['endpoint_id']}/{operation_id} имеет contract_status=broken "
+                            f"и используется: {', '.join(refs)}."
+                        )
                 try:
                     Draft202012Validator.check_schema(operation["request_schema"])
                 except SchemaError as error:
                     errors.append(
                         f"{endpoint['endpoint_id']}/{operation_id} request_schema невалидна: {error.message}"
                     )
+                try:
+                    Draft202012Validator.check_schema(operation["response_schema"])
+                except SchemaError as error:
+                    errors.append(
+                        f"{endpoint['endpoint_id']}/{operation_id} response_schema невалидна: {error.message}"
+                    )
+                if operation.get("mock_output") is not None:
+                    validator = Draft202012Validator(operation["response_schema"])
+                    for error in validator.iter_errors(operation["mock_output"]):
+                        errors.append(
+                            f"{endpoint['endpoint_id']}/{operation_id} mock_output не соответствует response_schema: "
+                            f"{error.message}"
+                        )
         for tool in self.active_payload("tools")["tools"]:
             for binding in tool["endpoint_bindings"]:
                 endpoint = endpoint_by_id.get(binding["endpoint_id"])
@@ -2801,6 +4591,63 @@ class ConfigStore:
                     f"{tool_name}/{endpoint_id}/{operation_id} parameter_mapping.{target_parameter} "
                     f"ссылается на отсутствующий параметр ReAct-вызова: {source_value}"
                 )
+                continue
+            if source == "react":
+                operation_parameter_schema = operation_properties.get(target_parameter)
+                react_parameter_schema = schema_properties(tool.get("parameters_schema")).get(source_value)
+                if not schemas_are_type_compatible(react_parameter_schema, operation_parameter_schema):
+                    errors.append(
+                        f"{tool_name}/{endpoint_id}/{operation_id} parameter_mapping.{target_parameter} "
+                        f"имеет несовместимые типы: ReAct {schema_type(react_parameter_schema)} -> endpoint {schema_type(operation_parameter_schema)}"
+                    )
+
+        result_mapping = binding.get("result_mapping", {})
+        if not isinstance(result_mapping, dict):
+            errors.append(f"{tool_name}/{endpoint_id}/{operation_id} result_mapping должен быть object.")
+            return errors
+
+        tool_result_schema = tool.get("result_schema", default_response_schema())
+        operation_response_schema = operation.get("response_schema", default_response_schema())
+        tool_result_properties = schema_properties(tool_result_schema)
+        required_result_fields = schema_required(tool_result_schema)
+        missing_result_fields = [
+            field_name
+            for field_name in required_result_fields
+            if field_name not in result_mapping
+        ]
+        for field_name in missing_result_fields:
+            errors.append(
+                f"{tool_name}/{endpoint_id}/{operation_id} не маппит обязательное поле результата ReAct-вызова: {field_name}"
+            )
+
+        if tool_result_schema.get("additionalProperties") is False:
+            for field_name in result_mapping:
+                if field_name not in tool_result_properties:
+                    errors.append(
+                        f"{tool_name}/{endpoint_id}/{operation_id} result_mapping.{field_name} "
+                        "маппит поле вне result_schema ReAct-вызова."
+                    )
+
+        for react_field, endpoint_path in result_mapping.items():
+            target_schema = tool_result_properties.get(react_field)
+            source_schema = schema_at_path(operation_response_schema, endpoint_path)
+            if react_field not in tool_result_properties:
+                errors.append(
+                    f"{tool_name}/{endpoint_id}/{operation_id} result_mapping.{react_field} "
+                    "ссылается на отсутствующее поле result_schema ReAct-вызова."
+                )
+                continue
+            if not source_schema:
+                errors.append(
+                    f"{tool_name}/{endpoint_id}/{operation_id} result_mapping.{react_field} "
+                    f"ссылается на отсутствующее поле response_schema операции: {endpoint_path}"
+                )
+                continue
+            if not schemas_are_type_compatible(source_schema, target_schema):
+                errors.append(
+                    f"{tool_name}/{endpoint_id}/{operation_id} result_mapping.{react_field} "
+                    f"имеет несовместимые типы: endpoint {schema_type(source_schema)} -> ReAct {schema_type(target_schema)}"
+                )
         return errors
 
     @staticmethod
@@ -2835,24 +4682,22 @@ class ConfigStore:
                         f"{launch['tool_name']} без привязки операции"
                     )
         for profile in self.active_payload("attribute_resolution_profiles")["profiles"]:
-            candidate_source = profile.get("candidate_source", {})
-            if candidate_source.get("source_type") != "react_call":
-                continue
-            tool_name = candidate_source.get("tool_name")
-            if not tool_name:
-                continue
-            tool = tool_by_name.get(tool_name)
-            if not tool:
-                errors.append(
-                    f"Профиль разрешения {profile['profile_id']} ссылается на отсутствующий tool_name: "
-                    f"{tool_name}"
-                )
-                continue
-            if not tool.get("endpoint_bindings"):
-                errors.append(
-                    f"Профиль разрешения {profile['profile_id']} ссылается на ReAct-вызов "
-                    f"{tool_name} без привязки операции"
-                )
+            for step in profile.get("enrichment_steps", []):
+                tool_name = step.get("react_call")
+                if not tool_name:
+                    continue
+                tool = tool_by_name.get(tool_name)
+                if not tool:
+                    errors.append(
+                        f"Профиль разрешения {profile['profile_id']} ссылается на отсутствующий ReAct-вызов: "
+                        f"{tool_name}"
+                    )
+                    continue
+                if not tool.get("endpoint_bindings"):
+                    errors.append(
+                        f"Профиль разрешения {profile['profile_id']} ссылается на ReAct-вызов "
+                        f"{tool_name} без привязки операции"
+                    )
         for channel in self.active_payload("interaction_channels")["channels"]:
             for action_key in ("question_delivery", "incomplete_discussion_action", "escalation_action"):
                 action = channel[action_key]
@@ -3002,7 +4847,14 @@ class ConfigStore:
         }
         for channel in channels:
             channel_id = channel["channel_id"]
+            allowed_actions = self._channel_action_types_for_mode(channel["mode"])
+            allowed_no_answer = self._channel_no_answer_actions_for_mode(channel["mode"])
             waiting = channel["waiting_policy"]
+            if waiting["on_no_answer"] not in allowed_no_answer:
+                errors.append(
+                    f"{channel_id}.waiting_policy.on_no_answer={waiting['on_no_answer']} "
+                    f"не подходит для режима канала {channel['mode']}."
+                )
             if waiting["discussion_timeout_seconds"] and (
                 waiting["discussion_timeout_seconds"] <= waiting["first_reminder_after_seconds"]
             ):
@@ -3013,9 +4865,19 @@ class ConfigStore:
             errors.extend(self._validate_required_channel_action_profiles(channel))
             for action_key in ("question_delivery", "incomplete_discussion_action", "escalation_action"):
                 action = channel[action_key]
+                if action["action_type"] not in allowed_actions:
+                    errors.append(
+                        f"{channel_id}.{action_key}.action_type={action['action_type']} "
+                        f"не подходит для режима канала {channel['mode']}."
+                    )
                 errors.extend(self._validate_channel_action_binding(tool_by_name, action, f"{channel_id}.{action_key}"))
             for profile in channel.get("action_profiles", []):
                 label = f"{channel_id}.action_profiles.{profile['profile_id']}"
+                if profile["action"]["action_type"] not in allowed_actions:
+                    errors.append(
+                        f"{label}.action_type={profile['action']['action_type']} "
+                        f"не подходит для режима канала {channel['mode']}."
+                    )
                 errors.extend(self._validate_channel_action_binding(tool_by_name, profile["action"], label))
 
         scenario_payload = self.active_payload("service_scenarios")
@@ -3024,6 +4886,26 @@ class ConfigStore:
         for channel_id in missing_refs:
             errors.append(f"Канал используется сценариями, но отсутствует в каталоге: {channel_id}")
         return errors
+
+    @staticmethod
+    def _channel_action_types_for_mode(mode: str) -> set[str]:
+        if mode == "online_interactive":
+            return {"ask_end_user", "create_draft", "call_specialist", "notify_on_call"}
+        if mode == "offline_interactive":
+            return {"ask_operator", "save_context", "create_work_order"}
+        if mode == "debug":
+            return {"show_debug_message", "debug_stop"}
+        return {"debug_stop"}
+
+    @staticmethod
+    def _channel_no_answer_actions_for_mode(mode: str) -> set[str]:
+        if mode == "online_interactive":
+            return {"create_draft", "call_specialist"}
+        if mode == "offline_interactive":
+            return {"save_context", "create_work_order"}
+        if mode == "debug":
+            return {"debug_stop"}
+        return {"debug_stop"}
 
     @staticmethod
     def _validate_required_channel_action_profiles(channel: dict[str, Any]) -> list[str]:
@@ -3088,20 +4970,27 @@ class ConfigStore:
             tool["tool_name"]: tool
             for tool in self.active_payload("tools")["tools"]
         }
+        endpoint_by_id = self._by_id(
+            self.active_payload("integration_endpoints")["endpoints"],
+            "endpoint_id",
+        )
 
         for profile in profiles:
             profile_id = profile["profile_id"]
-            if profile["target_slot_id"] not in profile["output_slots"]:
-                errors.append(f"{profile_id} target_slot_id должен входить в output_slots.")
-
-            attribute_ids = [
-                attribute["attribute_id"]
-                for attribute in profile.get("input_attributes", [])
-            ]
-            for attribute_id in self._duplicates(attribute_ids):
-                errors.append(f"{profile_id} содержит дублирующийся input attribute: {attribute_id}")
-            declared_attributes = set(attribute_ids)
-            declared_attributes.update(profile["output_slots"])
+            input_slot_ids = [slot["slot_id"] for slot in profile.get("input_slots", [])]
+            output_slot_ids = [slot["slot_id"] for slot in profile.get("output_slots_order", [])]
+            declared_slot_ids = set(input_slot_ids) | set(output_slot_ids)
+            if profile["target_slot_id"] not in output_slot_ids:
+                errors.append(f"{profile_id} target_slot_id должен входить в output_slots_order.")
+            for slot_id in self._duplicates(input_slot_ids):
+                errors.append(f"{profile_id} содержит дублирующийся входной слот: {slot_id}")
+            for slot_id in self._duplicates(output_slot_ids):
+                errors.append(f"{profile_id} содержит дублирующийся выходной слот: {slot_id}")
+            orders = [slot["order"] for slot in profile.get("output_slots_order", [])]
+            for order in self._duplicates(orders):
+                errors.append(f"{profile_id} содержит дублирующийся порядок выходного слота: {order}")
+            if not any(slot.get("required_for_success") for slot in profile.get("output_slots_order", [])):
+                errors.append(f"{profile_id} должен иметь хотя бы один обязательный выходной слот.")
 
             confidence_thresholds = profile.get("confidence_thresholds", {})
             base_threshold = profile.get("confidence_threshold")
@@ -3120,73 +5009,131 @@ class ConfigStore:
                 )
             )
 
-            clarification_policy = profile["clarification_policy"]
-            if not clarification_policy.get("question"):
-                errors.append(f"{profile_id} clarification_policy должен содержать question.")
-            if not clarification_policy.get("ask_for_attributes"):
-                errors.append(f"{profile_id} clarification_policy должен содержать ask_for_attributes.")
-            for attr_id in clarification_policy.get("ask_for_attributes", []):
-                if attr_id not in declared_attributes:
-                    errors.append(f"{profile_id} clarification_policy уточняет необъявленный атрибут: {attr_id}")
+            human_policy = profile["human_resolution_policy"]
+            if not human_policy.get("clarification_question"):
+                errors.append(f"{profile_id} human_resolution_policy должен содержать clarification_question.")
+            if not human_policy.get("clarification_slots"):
+                errors.append(f"{profile_id} human_resolution_policy должен содержать clarification_slots.")
+            for slot_id in human_policy.get("clarification_slots", []):
+                if slot_id not in declared_slot_ids:
+                    errors.append(f"{profile_id} human_resolution_policy.clarification_slots содержит необъявленный слот: {slot_id}")
+            for slot_id in human_policy.get("handoff_package", []):
+                if slot_id not in declared_slot_ids:
+                    errors.append(f"{profile_id} human_resolution_policy.handoff_package содержит необъявленный слот: {slot_id}")
 
-            for package_attr in profile["handoff_policy"].get("package", []):
-                if package_attr not in declared_attributes:
-                    errors.append(f"{profile_id} handoff_policy.package содержит необъявленный атрибут: {package_attr}")
-
-            candidate_source = profile["candidate_source"]
-            source_type = candidate_source["source_type"]
-            if source_type == "react_call":
-                for required_key in ("tool_name", "endpoint_id", "operation_id"):
-                    if not candidate_source.get(required_key):
-                        errors.append(f"{profile_id} candidate_source react_call должен содержать {required_key}.")
-                tool = tool_by_name.get(candidate_source.get("tool_name"))
-                if not tool and candidate_source.get("tool_name"):
-                    errors.append(f"{profile_id} candidate_source ссылается на неизвестный tool_name: {candidate_source['tool_name']}")
-                elif tool:
-                    matching_binding = next(
-                        (
-                            binding
-                            for binding in tool["endpoint_bindings"]
-                            if binding["endpoint_id"] == candidate_source.get("endpoint_id")
-                            and binding["operation_id"] == candidate_source.get("operation_id")
-                        ),
-                        None,
-                    )
-                    if not matching_binding:
+            seen_entities: set[str] = set()
+            entity_names = [step["result_entity_name"] for step in profile.get("enrichment_steps", [])]
+            for entity_name in self._duplicates(entity_names):
+                errors.append(f"{profile_id} содержит дублирующуюся сущность результата: {entity_name}")
+            for index, enrichment_step in enumerate(profile.get("enrichment_steps", []), start=1):
+                step_label = f"{profile_id}.enrichment_steps[{index}]"
+                tool = tool_by_name.get(enrichment_step.get("react_call"))
+                if not tool:
+                    errors.append(f"{step_label} ссылается на неизвестный ReAct-вызов: {enrichment_step.get('react_call')}")
+                elif not tool.get("endpoint_bindings"):
+                    errors.append(f"{step_label} ReAct-вызов {enrichment_step.get('react_call')} не имеет привязки операции.")
+                for parameter, source_ref in enrichment_step.get("parameter_mapping", {}).items():
+                    source, separator, value = str(source_ref).partition(":")
+                    if separator != ":" or source not in {"slot", "output", "entity", "constant", "secret"} or not value:
                         errors.append(
-                            f"{profile_id} candidate_source не имеет binding для "
-                            f"endpoint_id={candidate_source.get('endpoint_id')} "
-                            f"operation_id={candidate_source.get('operation_id')}."
+                            f"{step_label}.parameter_mapping.{parameter} должен иметь формат "
+                            "slot:<slot_id>, output:<slot_id>, entity:<entity[.field]>, constant:<value> или secret:<ref>."
                         )
-            elif source_type == "ticket_history" and not candidate_source.get("history_filter"):
-                errors.append(f"{profile_id} candidate_source ticket_history должен содержать history_filter.")
+                        continue
+                    if source == "slot" and value not in input_slot_ids:
+                        errors.append(
+                            f"{step_label}.parameter_mapping.{parameter} ссылается на слот вне входных слотов профиля: {value}"
+                        )
+                    elif source == "output" and value not in output_slot_ids:
+                        errors.append(
+                            f"{step_label}.parameter_mapping.{parameter} ссылается на неизвестный выходной слот: {value}"
+                        )
+                    elif source == "entity":
+                        entity_name = value.split(".", 1)[0]
+                        if entity_name not in seen_entities:
+                            errors.append(
+                                f"{step_label}.parameter_mapping.{parameter} ссылается на сущность, "
+                                f"которая еще не объявлена предыдущими шагами: {entity_name}"
+                            )
+                field_ids = [field["field_id"] for field in enrichment_step.get("result_fields", [])]
+                for field_id in self._duplicates(field_ids):
+                    errors.append(f"{step_label} содержит дублирующееся поле результата: {field_id}")
+                seen_entities.add(enrichment_step["result_entity_name"])
 
-            for parameter, source_ref in candidate_source.get("parameter_mapping", {}).items():
-                source, separator, value = str(source_ref).partition(":")
-                if separator != ":" or source not in {"slot", "attribute", "constant", "secret", "case", "context"} or not value:
-                    errors.append(
-                        f"{profile_id} candidate_source.parameter_mapping.{parameter} "
-                        "должен иметь формат slot:<id>, attribute:<id>, constant:<value>, secret:<env>, case:<path> или context:<id>."
-                    )
-                    continue
-                if source == "attribute" and value not in declared_attributes:
-                    errors.append(
-                        f"{profile_id} candidate_source.parameter_mapping.{parameter} "
-                        f"ссылается на необъявленный атрибут: {value}"
-                    )
-            result_policy = profile["result_policy"]
-            result_type = result_policy.get("result_type")
-            if result_type == "list" and not result_policy.get("list_path"):
-                errors.append(f"{profile_id} result_policy list должен содержать list_path.")
-            if result_type == "object" and not result_policy.get("object_path") and not result_policy.get("success_path"):
-                errors.append(f"{profile_id} result_policy object должен содержать object_path или success_path.")
-            for slot_id in result_policy.get("output_mapping", {}):
-                if slot_id not in profile["output_slots"]:
-                    errors.append(f"{profile_id} result_policy.output_mapping содержит неизвестный output slot: {slot_id}")
+            llm_script = profile["llm_resolution_script"]
+            if not llm_script.get("script_text"):
+                errors.append(f"{profile_id} llm_resolution_script должен содержать script_text.")
+            response_contract = llm_script.get("response_contract", {})
+            for required_key in ("decision", "filled_slots", "confidence", "next_question", "reason"):
+                if required_key not in response_contract:
+                    errors.append(f"{profile_id} llm_resolution_script.response_contract должен содержать {required_key}.")
 
             fallback = profile.get("fallback", {"action": "operator_handoff"})
             if fallback["action"] == "ask_user" and not fallback.get("question"):
                 errors.append(f"{profile_id} fallback ask_user должен содержать question.")
+        return errors
+
+    def _validate_slot_autofill_profiles(self, payload: dict[str, Any]) -> list[str]:
+        errors = []
+        profiles = payload.get("profiles", [])
+        profile_ids = [profile["profile_id"] for profile in profiles]
+        for profile_id in self._duplicates(profile_ids):
+            errors.append(f"Дублируется profile_id: {profile_id}")
+
+        slot_schema_by_id = self._by_id(
+            self.active_payload("slot_schemas")["slot_schemas"],
+            "slot_schema_id",
+        )
+        tool_by_name = self._by_id(self.active_payload("tools")["tools"], "tool_name")
+        for profile in profiles:
+            profile_id = profile["profile_id"]
+            slot_schema = slot_schema_by_id.get(profile["slot_schema_id"])
+            slot_ids = {slot["slot_id"] for slot in slot_schema.get("slots", [])} if slot_schema else set()
+            if not slot_schema:
+                errors.append(f"{profile_id} ссылается на неизвестную схему слотов: {profile['slot_schema_id']}")
+
+            tool = tool_by_name.get(profile.get("react_call"))
+            if not tool:
+                errors.append(f"{profile_id} ссылается на неизвестный ReAct-вызов: {profile.get('react_call')}")
+                result_field_roots: set[str] = set()
+                required_parameters: set[str] = set()
+            else:
+                if tool.get("action_type") != "read_only":
+                    errors.append(f"{profile_id} должен использовать только read-only ReAct-вызов.")
+                if not tool.get("endpoint_bindings"):
+                    errors.append(f"{profile_id} ReAct-вызов {tool.get('tool_name')} не имеет привязки операции.")
+                result_schema = tool.get("result_schema") or {}
+                result_field_roots = set(result_schema.get("properties", {}).keys())
+                required_parameters = set(tool.get("parameters_schema", {}).get("required", []))
+
+            mapped_parameters = set(profile.get("input_mapping", {}).keys())
+            for parameter in sorted(required_parameters - mapped_parameters):
+                errors.append(f"{profile_id} input_mapping не заполняет обязательный параметр ReAct-вызова: {parameter}")
+
+            for parameter, source_ref in profile.get("input_mapping", {}).items():
+                source, separator, value = str(source_ref).partition(":")
+                if separator != ":" or source not in {"slot", "case", "context", "constant", "secret"} or not value:
+                    errors.append(
+                        f"{profile_id} input_mapping.{parameter} должен быть ссылкой "
+                        "slot:<slot_id>, case:<path>, context:<path>, constant:<value> или secret:<ref>."
+                    )
+                    continue
+                if source == "slot" and slot_schema and value not in slot_ids:
+                    errors.append(f"{profile_id} input_mapping.{parameter} ссылается на неизвестный слот: {value}")
+
+            mapped_targets = [item["target_slot"] for item in profile.get("output_mapping", [])]
+            for target_slot in self._duplicates(mapped_targets):
+                errors.append(f"{profile_id} содержит дублирующийся целевой слот: {target_slot}")
+            for item in profile.get("output_mapping", []):
+                target_slot = item["target_slot"]
+                result_field = item["result_field"]
+                if slot_schema and target_slot not in slot_ids:
+                    errors.append(f"{profile_id} заполняет отсутствующий слот схемы {profile['slot_schema_id']}: {target_slot}")
+                root_field = result_field.split(".", 1)[0]
+                if result_field_roots and root_field not in result_field_roots:
+                    errors.append(
+                        f"{profile_id} output_mapping.{target_slot} ссылается на поле вне контракта результата: {result_field}"
+                    )
         return errors
 
     def _validate_service_scenarios(self, payload: dict[str, Any]) -> list[str]:
@@ -3279,6 +5226,11 @@ class ConfigStore:
                 self.active_payload("attribute_resolution_profiles")["profiles"],
                 "profile_id",
             )
+            active_autofill_profiles = [
+                profile
+                for profile in self.active_payload("slot_autofill_profiles").get("profiles", [])
+                if profile.get("slot_schema_id") == schema["slot_schema_id"]
+            ]
             for slot in schema["slots"]:
                 fill_method = slot_fill_method(slot)
                 profile_id = slot.get("resolution_profile_id")
@@ -3309,13 +5261,12 @@ class ConfigStore:
                         profile = profile_by_id.get(profile_id)
                         if not profile:
                             errors.append(f"{schema['slot_schema_id']} slot {slot['slot_id']} ссылается на неизвестный profile_id: {profile_id}")
-                        elif slot["slot_id"] not in profile["output_slots"]:
-                            errors.append(f"{schema['slot_schema_id']} slot {slot['slot_id']} не входит в output_slots профиля {profile_id}.")
+                        elif slot["slot_id"] not in [item["slot_id"] for item in profile.get("output_slots_order", [])]:
+                            errors.append(f"{schema['slot_schema_id']} slot {slot['slot_id']} не входит в output_slots_order профиля {profile_id}.")
                         else:
                             profile_input_slot_ids = [
-                                attribute.get("source_ref") or attribute["attribute_id"]
-                                for attribute in profile.get("input_attributes", [])
-                                if attribute.get("source") == "slot"
+                                input_slot["slot_id"]
+                                for input_slot in profile.get("input_slots", [])
                             ]
                             for profile_slot_id in profile_input_slot_ids:
                                 if profile_slot_id not in slot_by_id:
@@ -3323,6 +5274,14 @@ class ConfigStore:
                                         f"{schema['slot_schema_id']} профиль {profile_id} требует отсутствующий input slot: "
                                         f"{profile_slot_id}"
                                     )
+            for profile in active_autofill_profiles:
+                for mapping in profile.get("output_mapping", []):
+                    target_slot = mapping.get("target_slot")
+                    if target_slot not in slot_by_id:
+                        errors.append(
+                            f"{schema['slot_schema_id']} профиль автозаполнения {profile['profile_id']} "
+                            f"заполняет отсутствующий slot: {target_slot}"
+                        )
             for slot_id in schema["required_slots"]:
                 slot = slot_by_id.get(slot_id)
                 if not slot:
@@ -3372,6 +5331,26 @@ class ConfigStore:
             confidence = route["confidence"]
             if confidence["human_handoff_below"] > confidence["llm_min"]:
                 errors.append(f"{route['route_id']} human_handoff_below не должен быть выше llm_min.")
+            if confidence["llm_min"] > confidence["rules_min"]:
+                errors.append(f"{route['route_id']} llm_min не должен быть выше rules_min.")
+            rules = route.get("rules", {}).get("rule_items", [])
+            positive_rules = [rule for rule in rules if rule.get("polarity") == "positive"]
+            if not positive_rules:
+                errors.append(f"{route['route_id']} должен содержать хотя бы одно позитивное правило классификации.")
+            seen_rules: set[tuple[str, str, str]] = set()
+            for index, rule in enumerate(rules, start=1):
+                rule_key = (
+                    normalized_match_text(rule.get("text", "")),
+                    rule.get("match_type", ""),
+                    rule.get("polarity", ""),
+                )
+                if rule_key in seen_rules:
+                    errors.append(f"{route['route_id']} содержит дублирующееся правило классификации #{index}: {rule.get('text')}")
+                seen_rules.add(rule_key)
+                if rule.get("polarity") == "negative" and rule.get("required"):
+                    errors.append(f"{route['route_id']} negative rule #{index} не может быть обязательным.")
+                if rule.get("polarity") == "positive" and rule.get("blocking"):
+                    errors.append(f"{route['route_id']} positive rule #{index} не может быть блокирующим.")
         return errors
 
     def _validate_orchestrator_policy(self, payload: dict[str, Any]) -> list[str]:
@@ -3424,6 +5403,15 @@ class ConfigStore:
                 errors.append(f"{matrix_id}: дублируется launch_id: {launch_id}")
             scenarios = scenarios_by_matrix.get(matrix_id, [])
             for launch in matrix["launches"]:
+                if launch["execution_level"] != launch["target_execution_level"]:
+                    errors.append(
+                        f"{launch['launch_id']} должен иметь одинаковые execution_level и target_execution_level; "
+                        "целевой режим запуска больше не редактируется отдельно."
+                    )
+                if launch["execution_level"] == "approver_approval":
+                    errors.append(
+                        f"{launch['launch_id']} использует approver_approval, но flow согласующего пока не реализован."
+                    )
                 for scenario in scenarios:
                     slot_schema = slot_schema_by_id.get(scenario["slot_schema_id"])
                     known_slots = {
@@ -3680,7 +5668,7 @@ def default_interaction_channels() -> dict[str, Any]:
                 "channel_id": "messenger_bot",
                 "display_name": "Мессенджер-бот",
                 "mode": "online_interactive",
-                "description": "Онлайн-канал с прямым диалогом с пользователем: вопросы уходят пользователю, ожидание короткое, при незавершенном обсуждении сохраняется контекст и вызывается специалист.",
+                "description": "Онлайн-канал с прямым диалогом с клиентом: уточняющие вопросы уходят клиенту, ожидание короткое, при незавершенном уточнении сохраняется контекст, а при эскалации подключается оператор.",
                 "question_delivery": {
                     "action_type": "ask_end_user",
                     "message_template": "{question}",
@@ -3693,7 +5681,7 @@ def default_interaction_channels() -> dict[str, Any]:
                 },
                 "incomplete_discussion_action": {
                     "action_type": "create_draft",
-                    "message_template": "Создать черновик заявки и сохранить контекст диалога.",
+                    "message_template": "Создать черновик заявки и сохранить контекст клиентского уточнения.",
                 },
                 "escalation_action": {
                     "action_type": "call_specialist",
@@ -3713,7 +5701,7 @@ def default_interaction_channels() -> dict[str, Any]:
                 "channel_id": "service_desk",
                 "display_name": "Сервисдеск",
                 "mode": "offline_interactive",
-                "description": "Офлайн-интерактивный канал сервисдеска: вопросы фиксируются в заявке, ожидание длиннее и зависит от SLA, эскалация создает наряд по назначенному правилу.",
+                "description": "Офлайн-интерактивный канал сервисдеска: уточняющие вопросы фиксируются в заявке, ожидание длиннее и зависит от SLA, эскалация создает наряд по назначенному правилу.",
                 "question_delivery": {
                     "action_type": "ask_operator",
                     "message_template": "{question}",
@@ -3759,7 +5747,7 @@ def default_interaction_channels() -> dict[str, Any]:
                 },
                 "incomplete_discussion_action": {
                     "action_type": "debug_stop",
-                    "message_template": "Остановить dry-run и показать оператору недостающий контекст.",
+                    "message_template": "Остановить dry-run и показать оператору недостающий контекст клиентского уточнения.",
                 },
                 "escalation_action": {
                     "action_type": "debug_stop",
@@ -3787,10 +5775,10 @@ def default_channel_action_profiles(channel: dict[str, Any]) -> list[dict[str, A
     }
     if channel_id == "messenger_bot":
         return [
-            _channel_action_profile("standard_handoff", "Передача специалисту в чат", "standard_handoff", legacy_escalation_action),
-            _channel_action_profile("no_answer", "Нет ответа: создать черновик", "no_answer", {
+            _channel_action_profile("standard_handoff", "Эскалация: подключить оператора к чату", "standard_handoff", legacy_escalation_action),
+            _channel_action_profile("no_answer", "Клиент не ответил: создать черновик", "no_answer", {
                 "action_type": "create_draft",
-                "message_template": "Создать черновик заявки и сохранить контекст диалога.",
+                "message_template": "Создать черновик заявки и сохранить контекст клиентского уточнения.",
             }),
             _channel_action_profile("major_incident", "Major Incident: оповестить дежурных", "major_incident", {
                 "action_type": "notify_on_call",
@@ -3800,10 +5788,10 @@ def default_channel_action_profiles(channel: dict[str, Any]) -> list[dict[str, A
         ]
     if channel_id == "service_desk":
         return [
-            _channel_action_profile("standard_handoff", "Передача: создать наряд", "standard_handoff", legacy_escalation_action),
-            _channel_action_profile("no_answer", "Нет ответа: создать наряд", "no_answer", {
+            _channel_action_profile("standard_handoff", "Эскалация: создать наряд", "standard_handoff", legacy_escalation_action),
+            _channel_action_profile("no_answer", "Клиент не ответил: создать наряд", "no_answer", {
                 "action_type": "create_work_order",
-                "message_template": "Создать наряд по незавершенному обсуждению и приложить контекст.",
+                "message_template": "Создать наряд по незавершенному уточнению и приложить контекст.",
             }),
             _channel_action_profile("major_incident", "Major Incident: создать наряд дежурной группе", "major_incident", {
                 "action_type": "create_work_order",
@@ -3812,10 +5800,10 @@ def default_channel_action_profiles(channel: dict[str, Any]) -> list[dict[str, A
             _channel_action_profile("policy_blocked", "Политика заблокировала автоисполнение", "policy_blocked", legacy_escalation_action),
         ]
     return [
-        _channel_action_profile("standard_handoff", "Отладка: остановить передачу", "standard_handoff", legacy_escalation_action),
-        _channel_action_profile("no_answer", "Отладка: нет ответа", "no_answer", {
+        _channel_action_profile("standard_handoff", "Отладка: эскалация оператору", "standard_handoff", legacy_escalation_action),
+        _channel_action_profile("no_answer", "Отладка: клиент не ответил", "no_answer", {
             "action_type": "debug_stop",
-            "message_template": "Остановить dry-run из-за отсутствия ответа.",
+            "message_template": "Остановить dry-run из-за отсутствия ответа клиента.",
         }),
         _channel_action_profile("major_incident", "Отладка: Major Incident", "major_incident", {
             "action_type": "debug_stop",
@@ -4026,6 +6014,13 @@ def default_slot_schemas() -> dict[str, Any]:
     }
 
 
+def default_slot_autofill_profiles() -> dict[str, Any]:
+    return {
+        "schema_version": "1.0",
+        "profiles": [],
+    }
+
+
 def default_attribute_resolution_profiles() -> dict[str, Any]:
     def candidate_profile(
         profile_id: str,
@@ -4045,29 +6040,74 @@ def default_attribute_resolution_profiles() -> dict[str, Any]:
         max_attempts: int = 1,
         fallback_action: str = "ask_user",
     ) -> dict[str, Any]:
-        return {
+        input_slots = []
+        seen_input_slots = set()
+        for attribute in input_attributes:
+            if attribute.get("source") != "slot":
+                continue
+            slot_id = attribute.get("source_ref") or attribute.get("attribute_id")
+            if not slot_id or slot_id in seen_input_slots:
+                continue
+            seen_input_slots.add(slot_id)
+            input_slots.append({
+                "slot_id": slot_id,
+                "required_for_operation": bool(attribute.get("required", True)),
+                "can_ask_user": True,
+                "description": attribute.get("display_name") or humanize_config_id(slot_id),
+            })
+        if not input_slots:
+            input_slots.append({
+                "slot_id": target_slot_id,
+                "required_for_operation": False,
+                "can_ask_user": True,
+                "description": f"Слот для разрешения: {humanize_config_id(target_slot_id)}.",
+            })
+        parameter_mapping = slot_parameter_mapping_from_legacy(
+            candidate_source.get("parameter_mapping", {}),
+            input_attributes,
+        )
+        resolver_operation = {
+            "source_type": candidate_source.get("source_type", "disabled"),
+            "parameter_mapping": parameter_mapping,
+        }
+        for key in ("tool_name", "endpoint_id", "operation_id", "history_filter"):
+            if candidate_source.get(key):
+                resolver_operation[key] = candidate_source[key]
+        result_entity = operation_result_entity_from_policy(resolver_operation, result_policy)
+        enrichment_steps = enrichment_steps_from_legacy(resolver_operation, result_entity)
+        output_order = output_slots_order_from_policy(target_slot_id, output_slots, result_policy)
+        human_policy = {
+            "clarification_question": clarification_question,
+            "clarification_slots": [
+                slot_id
+                for slot_id in clarification_attributes
+                if slot_id in {item["slot_id"] for item in input_slots} or slot_id in output_slots
+            ] or [input_slots[0]["slot_id"]],
+            "handoff_package": [
+                slot_id
+                for slot_id in (handoff_package or [*output_slots, *[item["slot_id"] for item in input_slots]])
+                if slot_id in {item["slot_id"] for item in input_slots} or slot_id in output_slots
+            ] or output_slots[:1],
+            "handoff_action": "operator_handoff",
+            "fallback_action": fallback_action,
+        }
+        profile = {
             "profile_id": profile_id,
             "display_name": display_name,
             "status": status,
             "description": description,
             "target_slot_id": target_slot_id,
-            "output_slots": output_slots,
-            "input_attributes": input_attributes,
-            "candidate_source": candidate_source,
-            "result_policy": result_policy,
-            "decision_policy": copy.deepcopy(DEFAULT_RESOLUTION_DECISION_POLICY),
-            "clarification_policy": {
-                "question": clarification_question,
-                "ask_for_attributes": clarification_attributes,
+            "input_slots": input_slots,
+            "enrichment_steps": enrichment_steps,
+            "output_slots_order": normalize_output_slot_order(output_order, target_slot_id),
+            "llm_resolution_script": {
+                "script_text": (
+                    "Выбери результат операции и заполни выходные слоты по порядку. "
+                    "Если результат неоднозначен или обязательный слот не заполнен, сформулируй один уточняющий вопрос."
+                ),
+                "response_contract": default_resolution_response_contract(),
             },
-            "handoff_policy": {
-                "action": "operator_handoff",
-                "package": handoff_package
-                or [
-                    *[attribute["attribute_id"] for attribute in input_attributes],
-                    *output_slots,
-                ],
-            },
+            "human_resolution_policy": human_policy,
             "fallback": {
                 "action": fallback_action,
                 "question": clarification_question,
@@ -4082,6 +6122,8 @@ def default_attribute_resolution_profiles() -> dict[str, Any]:
             "audit_required": True,
             "log_required": True,
         }
+        profile["llm_resolution_script"]["script_text"] = default_resolution_script_text(profile)
+        return profile
 
     return {
         "schema_version": "1.0",
@@ -4259,12 +6301,90 @@ def default_classification_routes() -> dict[str, Any]:
         for item in DEFAULT_SCENARIOS
     }
     route_data = [
-        ("password_reset", "P3", "auto_agent", "Сброс пароля через runbook после подтверждения в MVP.", "pending_approval", ["пароль", "войти", "логин"]),
-        ("software_issue", "P2", "agent_with_confirmation", "Диагностика приложения агентом и подтверждение человеком.", "pending_approval", ["не запускается", "ошибка", "приложение"]),
-        ("hardware_issue", "P3", "agent_with_confirmation", "Проверка устройства и передача человеку при необходимости.", "pending_approval", ["ноутбук", "устройство", "принтер"]),
-        ("network_issue", "P1", "major_incident", "Немедленная проверка массовости и запуск процедуры Major Incident при затронутых пользователях.", "escalation_required", ["сеть", "vpn", "недоступно"]),
-        ("access_request", "P3", "approver", "Запрос руководителю на согласование доступа.", "pending_approval", ["доступ", "права", "группа"]),
-        ("unknown", "P4", "human_review", "Передача человеку с подсказками по вероятным категориям.", "escalation_required", ["помогите", "проблема"]),
+        (
+            "password_reset",
+            "P3",
+            "auto_agent",
+            "Сброс пароля через runbook после подтверждения в MVP.",
+            "pending_approval",
+            [
+                classification_rule("сброс пароля", match_type="phrase", weight=0.9, explanation="Прямая фраза сброса пароля."),
+                classification_rule("забыл пароль", match_type="phrase", weight=0.8, explanation="Пользователь сообщает, что забыл пароль."),
+                classification_rule("пароль", match_type="word", weight=0.6, explanation="Упоминание пароля."),
+                classification_rule("войти", match_type="word", weight=0.4, explanation="Проблема входа часто связана с паролем."),
+                classification_rule("доступ", match_type="word", polarity="negative", weight=0.7, explanation="Запрос доступа относится к другому маршруту."),
+                classification_rule("vpn", match_type="word", polarity="negative", weight=0.7, explanation="VPN чаще относится к сетевому маршруту."),
+            ],
+        ),
+        (
+            "software_issue",
+            "P2",
+            "agent_with_confirmation",
+            "Диагностика приложения агентом и подтверждение человеком.",
+            "pending_approval",
+            [
+                classification_rule("не запускается", match_type="phrase", weight=0.8, explanation="Признак проблемы запуска приложения."),
+                classification_rule("ошибка", match_type="word", weight=0.5, explanation="Пользователь сообщает об ошибке приложения."),
+                classification_rule("приложение", match_type="word", weight=0.6, explanation="Явное упоминание приложения."),
+                classification_rule("пароль", match_type="word", polarity="negative", weight=0.6, explanation="Пароль относится к маршруту сброса пароля."),
+                classification_rule("сеть", match_type="word", polarity="negative", weight=0.5, explanation="Сеть относится к сетевому маршруту."),
+            ],
+        ),
+        (
+            "hardware_issue",
+            "P3",
+            "agent_with_confirmation",
+            "Проверка устройства и эскалация оператору при необходимости.",
+            "pending_approval",
+            [
+                classification_rule("ноутбук", match_type="word", weight=0.7, explanation="Упоминание пользовательского устройства."),
+                classification_rule("устройство", match_type="word", weight=0.5, explanation="Общий аппаратный признак."),
+                classification_rule("принтер", match_type="word", weight=0.7, explanation="Принтер относится к аппаратной поддержке."),
+                classification_rule("экран", match_type="word", weight=0.5, explanation="Частый аппаратный симптом."),
+                classification_rule("пароль", match_type="word", polarity="negative", weight=0.7, explanation="Пароль относится к маршруту сброса пароля."),
+            ],
+        ),
+        (
+            "network_issue",
+            "P1",
+            "major_incident",
+            "Немедленная проверка массовости и запуск процедуры Major Incident при затронутых пользователях.",
+            "escalation_required",
+            [
+                classification_rule("не работает vpn", match_type="phrase", weight=0.9, explanation="Прямой сетевой симптом VPN."),
+                classification_rule("нет сети", match_type="phrase", weight=0.9, explanation="Прямой сетевой симптом."),
+                classification_rule("vpn", match_type="word", weight=0.7, explanation="Упоминание VPN."),
+                classification_rule("сеть", match_type="word", weight=0.6, explanation="Упоминание сети."),
+                classification_rule("недоступно", match_type="word", weight=0.4, explanation="Симптом недоступности."),
+                classification_rule("пароль", match_type="word", polarity="negative", weight=0.7, explanation="Пароль относится к маршруту сброса пароля."),
+            ],
+        ),
+        (
+            "access_request",
+            "P3",
+            "approver",
+            "Запрос руководителю на согласование доступа.",
+            "pending_approval",
+            [
+                classification_rule("запрос доступа", match_type="phrase", weight=0.9, explanation="Прямая фраза запроса доступа."),
+                classification_rule("доступ", match_type="word", weight=0.7, explanation="Упоминание доступа."),
+                classification_rule("права", match_type="word", weight=0.6, explanation="Упоминание прав доступа."),
+                classification_rule("группа", match_type="word", weight=0.5, explanation="Группа доступа."),
+                classification_rule("пароль", match_type="word", polarity="negative", weight=0.7, explanation="Пароль относится к маршруту сброса пароля."),
+            ],
+        ),
+        (
+            "unknown",
+            "P4",
+            "human_review",
+            "Передача человеку с подсказками по вероятным категориям.",
+            "escalation_required",
+            [
+                classification_rule("помогите", match_type="word", weight=0.4, explanation="Общее обращение без явной категории."),
+                classification_rule("проблема", match_type="word", weight=0.3, explanation="Общее описание проблемы."),
+                classification_rule("непонятно", match_type="word", weight=0.5, explanation="Пользователь не может сформулировать категорию."),
+            ],
+        ),
     ]
     return {
         "schema_version": "1.0",
@@ -4282,12 +6402,11 @@ def default_classification_routes() -> dict[str, Any]:
                     "human_handoff_below": 0.50,
                 },
                 "rules": {
-                    "keywords": keywords,
-                    "negative_keywords": [],
+                    "rule_items": rule_items,
                 },
                 "top_categories_on_low_confidence": 3,
             }
-            for scenario_id, priority, route, action, workflow_state_id, keywords in route_data
+            for scenario_id, priority, route, action, workflow_state_id, rule_items in route_data
         ],
     }
 
@@ -4340,7 +6459,7 @@ def default_tool_launch_matrix() -> dict[str, Any]:
                     "user_login": "slot:user_login",
                 },
                 "operator_approval",
-                "auto",
+                "operator_approval",
                 "n8n",
                 "start_systemcenter_runbook",
                 "medium",
@@ -4360,7 +6479,7 @@ def default_tool_launch_matrix() -> dict[str, Any]:
                     "error_text": "slot:error_text",
                 },
                 "operator_approval",
-                "auto",
+                "operator_approval",
                 "n8n",
                 "start_systemcenter_runbook",
                 "medium",
@@ -4495,12 +6614,12 @@ def default_prompt_packs() -> dict[str, Any]:
 def _prompt_blocks(display_name: str) -> dict[str, str]:
     return {
         "role_context": f"Ты AI ServiceDesk агент. Текущий сценарий: {display_name}. Работай только в границах утвержденной конфигурации сценария.",
-        "behavior_principles": "Задавай один вопрос за раз. Не раскрывай внутренние ReAct-вызовы пользователю. Пиши без жаргона и фиксируй недостающие данные.",
-        "slot_schemas": "Собирай слоты в порядке кто -> что -> когда. Используй auto-fill источники до вопроса пользователю. При таймауте 3 минуты напомни, при 8 минутах сохрани черновик.",
-        "classification_confidence": "Сначала используй правила и ключевые слова. Если confidence ниже 0.85, используй LLM few-shot. Если ниже 0.70, передай человеку с топ-3 категориями. Если ниже 0.50, не принимай финальное решение автоматически.",
+        "behavior_principles": "Задавай один вопрос за раз. Не раскрывай внутренние ReAct-вызовы клиенту. Пиши без жаргона и фиксируй недостающие данные.",
+        "slot_schemas": "Собирай слоты в порядке кто -> что -> когда. Используй auto-fill источники до вопроса клиенту. При таймауте 3 минуты напомни, при 8 минутах сохрани черновик.",
+        "classification_confidence": "Сначала используй правила классификации с позитивными и негативными признаками. Если confidence ниже 0.85, используй LLM few-shot. Если ниже 0.70, передай человеку с топ-3 категориями. Если ниже 0.50, не принимай финальное решение автоматически.",
         "react_planning": "Используй цикл Думай -> Действуй -> Наблюдай. Максимум 6 итераций. При двух ошибках ReAct-вызовов подряд запускай действие эскалации выбранного канала.",
-        "tool_rules": "Проверяй required slots и parameter bindings перед каждым ReAct-вызовом ИИ. Action-вызовы в MVP запускаются только после подтверждения оператора, даже если target_execution_level равен auto.",
-        "escalation_response": "Передавай в канал эскалации полный пакет: слоты, историю ReAct, результаты ReAct-вызовов, гипотезу причины, остаток SLA и текст уведомления пользователя.",
+        "tool_rules": "Проверяй required slots и parameter bindings перед каждым ReAct-вызовом ИИ. Action-вызовы в MVP запускаются только после подтверждения оператора.",
+        "escalation_response": "Передавай оператору через канал эскалации полный пакет: слоты, историю ReAct, результаты ReAct-вызовов, гипотезу причины, остаток SLA и текст уведомления клиента.",
     }
 
 

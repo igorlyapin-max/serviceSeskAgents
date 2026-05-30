@@ -8,6 +8,9 @@ const state = {
   casePoll: null,
   knowledge: null,
   activeTab: 'rag',
+  activeMainTab: 'steps',
+  workflowStarted: false,
+  ticketTextSnapshot: '',
   scenarios: [],
   scenarioId: 'password_reset',
   scenarioDetail: null,
@@ -15,7 +18,6 @@ const state = {
   dryRunEnabled: true,
   testRunMode: 'config_check',
   providedSlots: {},
-  scenarioSimulationTimer: null,
 };
 
 const elements = {
@@ -54,6 +56,8 @@ const elements = {
   traceView: document.getElementById('traceView'),
   copyText: document.getElementById('copyText'),
   tabs: Array.from(document.querySelectorAll('.tab')),
+  mainTabs: Array.from(document.querySelectorAll('[data-main-tab]')),
+  mainPanels: Array.from(document.querySelectorAll('[data-main-panel]')),
 };
 
 const visibleLabels = {
@@ -64,6 +68,7 @@ const visibleLabels = {
   blocked: 'заблокировано',
   continue_slot_filling: 'нужно обогащение',
   blocked_by_configuration: 'ошибка конфигурации',
+  completed: 'выполнено',
   draft: 'черновик',
   error: 'ошибка',
   failed: 'ошибка',
@@ -75,6 +80,7 @@ const visibleLabels = {
   missing: 'требуется ответ',
   model_unavailable: 'модель недоступна',
   operator_approval: 'согласование оператора',
+  approval_required: 'нужно подтверждение',
   operator_manual: 'ручное заполнение оператором',
   optional: 'необязательный',
   p1: 'P1',
@@ -90,16 +96,23 @@ const visibleLabels = {
   ready_for_react: 'готово к ReAct',
   required: 'обязательный',
   resolution_pending: 'ожидает разрешения',
+  skipped: 'пропущено',
+  slot_autofill: 'ReAct-автозаполнение',
+  started: 'запущено',
+  filled_by_slot_autofill: 'заполнено ReAct-автозаполнением',
+  missing_required_result_field: 'нет обязательного поля результата',
   extraction_pending: 'ожидает извлечения',
   filled_by_model: 'заполнено моделью',
   candidate_below_threshold: 'результат ниже порога',
   waiting_operator_approval: 'ожидает подтверждения',
-  question_required: 'нужно уточнение',
+  prepared: 'подготовлено',
+  not_executed: 'не выполнялось',
+  question_required: 'нужно уточнение у клиента',
   resolution_profile: 'профиль разрешения',
   dry_run_simulated: 'смоделировано',
   success: 'успешно',
   unavailable: 'недоступно',
-  user_question: 'вопрос пользователю',
+  user_question: 'вопрос клиенту',
   case: 'из данных обращения',
   llm_extraction: 'извлечение моделью',
   llm_extract: 'извлечение из текста',
@@ -110,13 +123,13 @@ const visibleLabels = {
   condition: 'условие',
   clarification: 'уточнение',
   fill_slot: 'заполнение слота',
-  operator_handoff: 'передача человеку',
+  operator_handoff: 'эскалация оператору',
   escalate: 'эскалация',
   online_interactive: 'онлайн-интерактивный',
   offline_interactive: 'офлайн-интерактивный',
   debug: 'отладочный режим',
-  ask_end_user: 'вопрос пользователю',
-  ask_operator: 'вопрос оператору',
+  ask_end_user: 'вопрос клиенту',
+  ask_operator: 'вопрос через оператора',
   show_debug_message: 'показать в отладке',
   save_context: 'сохранить контекст',
   create_draft: 'создать черновик',
@@ -124,13 +137,14 @@ const visibleLabels = {
   call_specialist: 'позвать специалиста',
   notify_on_call: 'оповестить дежурных',
   debug_stop: 'остановить с сообщением',
-  standard_handoff: 'обычная передача',
-  no_answer: 'нет ответа',
+  standard_handoff: 'эскалация оператору',
+  no_answer: 'нет ответа клиента',
+  no: 'нет',
   policy_blocked: 'policy blocked',
   all_required_slots_filled: 'все обязательные слоты заполнены',
   tool_success: 'успешный результат инструмента',
-  clarification_required: 'нужно уточнение',
-  handoff_required: 'требуется передача',
+  clarification_required: 'нужно уточнение у клиента',
+  handoff_required: 'требуется эскалация оператору',
   iteration_limit: 'лимит итераций',
   consecutive_tool_errors: 'ошибки инструментов подряд',
   read_diagnostics: 'чтение и диагностика',
@@ -138,7 +152,7 @@ const visibleLabels = {
   external_status_check: 'проверка внешних систем',
   action_preparation: 'подготовка действия',
   state_changing_actions: 'действия с изменением состояния',
-  communication_handoff: 'коммуникация и передача',
+  communication_handoff: 'коммуникация и эскалация',
   react_call: 'ReAct-вызов чтения',
   ticket_history: 'история заявок',
   case_data: 'данные обращения',
@@ -148,6 +162,11 @@ const visibleLabels = {
   empty_result: 'результат не найден',
   single_result: 'один результат',
   multiple_results: 'несколько результатов',
+  accepted_by_rules: 'принято правилами',
+  llm_required: 'нужна LLM-классификация',
+  human_review_required: 'нужна проверка оператором',
+  human_required: 'эскалировать оператору',
+  yes: 'да',
 };
 
 const priorityGroupLabels = {
@@ -159,9 +178,10 @@ const priorityGroupLabels = {
 };
 
 const fillMethodLabels = {
-  user_question: 'вопрос пользователю',
+  user_question: 'вопрос клиенту',
   case: 'из данных обращения',
   llm_extraction: 'извлечение моделью',
+  slot_autofill: 'ReAct-автозаполнение',
   resolution_profile: 'профиль разрешения',
   operator_manual: 'ручное заполнение оператором',
 };
@@ -169,8 +189,8 @@ const fillMethodLabels = {
 const stopConditionLabels = {
   all_required_slots_filled: 'все обязательные слоты заполнены',
   tool_success: 'получен успешный результат инструмента',
-  clarification_required: 'нужно уточнение',
-  handoff_required: 'требуется передача',
+  clarification_required: 'нужно уточнение у клиента',
+  handoff_required: 'требуется эскалация оператору',
   iteration_limit: 'достигнут лимит итераций',
   consecutive_tool_errors: 'ошибки инструментов подряд',
 };
@@ -181,7 +201,7 @@ const reactActionGroupLabels = {
   external_status_check: 'проверка внешних систем',
   action_preparation: 'подготовка действия',
   state_changing_actions: 'действия с изменением состояния',
-  communication_handoff: 'коммуникация и передача',
+  communication_handoff: 'коммуникация и эскалация',
 };
 
 const eventTypeLabels = {
@@ -320,9 +340,155 @@ function table(headers, rows) {
   `;
 }
 
+function traceJson(value) {
+  if (value === undefined || value === null || value === '') {
+    return 'н/д';
+  }
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return escapeHtml(value);
+  }
+  return `<pre class="trace-payload">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
+}
+
+function traceCallLabel(item) {
+  const details = item.details || {};
+  const callName = details.react_call || details.tool_name || '';
+  const endpoint = details.endpoint_id || '';
+  const operation = details.operation_id || '';
+  if (callName && endpoint && operation) {
+    return `${callName} -> ${endpoint}/${operation}`;
+  }
+  if (callName) return callName;
+  if (endpoint || operation) return `${endpoint || 'н/д'}/${operation || 'н/д'}`;
+  if (details.provider || details.model) return `${details.provider || 'LLM'} / ${details.model || 'модель не указана'}`;
+  return '';
+}
+
+function traceParameters(item) {
+  const details = item.details || {};
+  if (details.parameters !== undefined && details.parameter_sources !== undefined) {
+    return {
+      'значения параметров': details.parameters,
+      'источники параметров': details.parameter_sources,
+    };
+  }
+  if (details.parameters !== undefined) return details.parameters;
+  if (details.parameter_sources !== undefined) return details.parameter_sources;
+  const fallback = {};
+  for (const key of ['missing_parameters', 'missing_slots', 'missing_parameter_slots', 'slot_ids']) {
+    if (details[key] !== undefined) fallback[key] = details[key];
+  }
+  return Object.keys(fallback).length ? fallback : '';
+}
+
+function traceResult(item) {
+  const details = item.details || {};
+  if (details.filled_slot_values !== undefined) {
+    return {
+      'заполнено в слоты': details.filled_slot_values,
+      'ответ операции': details.result,
+    };
+  }
+  if (details.result !== undefined) return details.result;
+  if (details.output_values !== undefined) return details.output_values;
+  const fallback = {};
+  for (const key of [
+    'output_slots',
+    'missing_required_result_fields',
+    'candidate_count',
+    'confidence',
+    'decision',
+    'positive_hits',
+    'negative_hits',
+  ]) {
+    if (details[key] !== undefined) fallback[key] = details[key];
+  }
+  return Object.keys(fallback).length ? fallback : '';
+}
+
+function formatTraceInlineValue(value) {
+  if (value === undefined || value === null || value === '') return 'н/д';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
+}
+
+function renderFilledSlotValues(items = []) {
+  if (!Array.isArray(items) || !items.length) return '';
+  return `
+    <div class="filled-slot-list">
+      <div class="metric-label">Заполнено</div>
+      ${items.map((item) => `
+        <div class="filled-slot-row">
+          <strong>${escapeHtml(item.target_slot || 'слот не задан')}</strong>
+          <span>${escapeHtml(formatTraceInlineValue(item.value))}</span>
+          <small>из поля результата ${escapeHtml(item.result_field || 'н/д')}</small>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderDryRunTraceItem(item, index) {
+  const callLabel = traceCallLabel(item);
+  const parameters = traceParameters(item);
+  const result = traceResult(item);
+  const filledSlotValues = item.details?.filled_slot_values || [];
+  return `
+    <div class="dry-run-trace-item">
+      <div class="dry-run-trace-head">
+        <span class="trace-step">#${index + 1} / шаг ${escapeHtml(item.step || 'н/д')}</span>
+        <strong>${escapeHtml(item.title || 'Событие')}</strong>
+        ${badge(item.status || 'info')}
+      </div>
+      <div class="trace-meta">${escapeHtml(item.message || '')}</div>
+      ${renderFilledSlotValues(filledSlotValues)}
+      <div class="dry-run-trace-grid">
+        <div>
+          <div class="metric-label">Что вызывалось</div>
+          <div class="trace-value">${escapeHtml(callLabel || 'нет внешнего вызова')}</div>
+        </div>
+        <div>
+          <div class="metric-label">Параметры</div>
+          <div class="trace-value">${traceJson(parameters)}</div>
+        </div>
+        <div>
+          <div class="metric-label">Результат</div>
+          <div class="trace-value">${traceJson(result)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderDryRunTracePanel(simulation) {
+  const trace = simulation?.execution_trace || [];
+  if (!trace.length) {
+    return `
+      <details class="trace-run-block" open>
+        <summary>
+          <span class="trace-run-title">Трасса тестового прогона</span>
+          ${badge('pending')}
+        </summary>
+        <div class="trace-run-body"><div class="empty">Тестовый прогон еще не выполнялся</div></div>
+      </details>
+    `;
+  }
+  return `
+    <details class="trace-run-block" open>
+      <summary>
+        <span class="trace-run-title">Трасса тестового прогона</span>
+        <span class="summary-line">${trace.length} событий</span>
+      </summary>
+      <div class="trace-run-body">
+        ${trace.map((item, index) => renderDryRunTraceItem(item, index)).join('')}
+      </div>
+    </details>
+  `;
+}
+
 function stepBlock(number, title, status, body) {
   return `
-    <details class="step-block" open>
+    <details class="step-block">
       <summary>
         <span class="step-number">${number}</span>
         <span class="step-title">${escapeHtml(title)}</span>
@@ -336,6 +502,10 @@ function stepBlock(number, title, status, body) {
 function formatList(items, mapper = (item) => item) {
   const values = (items || []).map(mapper).filter(Boolean);
   return values.length ? values.map(escapeHtml).join(', ') : 'н/д';
+}
+
+function formatRuleHits(items) {
+  return formatList(items, (item) => item.explanation || item.text);
 }
 
 function formatMap(map) {
@@ -383,6 +553,25 @@ function slotDisplayValue(slot) {
   return 'н/д';
 }
 
+function readableSlotValue(value) {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function slotResultValue(slot) {
+  const simulationValue = state.scenarioSimulation?.slot_values?.[slot.slot_id];
+  const result = readableSlotValue(simulationValue?.value);
+  const provided = readableSlotValue(state.providedSlots[slot.slot_id]);
+  return result || provided || 'не заполнен';
+}
+
 function slotFillMethod(slot) {
   if (slot.fill_method) return slot.fill_method;
   if (slot.source === 'user_question') return 'user_question';
@@ -413,16 +602,6 @@ function slotQuestionText(slot) {
   return '';
 }
 
-function slotContextText(slot) {
-  const fillMethod = slotFillMethod(slot);
-  if (fillMethod === 'user_question') return slot.user_question || slot.question || 'н/д';
-  if (fillMethod === 'case') return slot.case_source_ref || slot.auto_fill_ref || 'н/д';
-  if (fillMethod === 'llm_extraction') return slot.extraction_instruction || slot.question || 'н/д';
-  if (fillMethod === 'resolution_profile') return slotResolutionProfile(slot)?.display_name || slot.fallback_question || slot.question || 'н/д';
-  if (fillMethod === 'operator_manual') return slot.operator_hint || slot.question || 'н/д';
-  return 'н/д';
-}
-
 function slotById(detail, slotId) {
   return (detail?.slot_schema?.slots || []).find((item) => item.slot_id === slotId) || null;
 }
@@ -442,6 +621,12 @@ function automaticMissingSlotIds(simulation = state.scenarioSimulation, detail =
 function resolutionProgressText(item) {
   if (!item) return 'н/д';
   const summary = item.result_summary || item.candidate_summary || {};
+  if (item.llm_decision) {
+    const count = summary.item_count ?? summary.count ?? item.candidate_count;
+    const decision = item.llm_decision.decision || item.decision;
+    const reason = item.llm_decision.reason || item.reason || '';
+    return `результатов: ${count ?? 'н/д'} -> ${visibleLabels[decision] || decision}${reason ? `; ${reason}` : ''}`;
+  }
   if (item.decision) {
     const count = summary.item_count ?? summary.count ?? item.candidate_count;
     const objectFound = summary.object_found;
@@ -455,6 +640,47 @@ function resolutionProgressText(item) {
     .join(' -> ');
   const current = item.current_step_name || 'ожидает запуска';
   return completed ? `${completed} -> ${current}` : current;
+}
+
+function resolutionEnrichmentLabel(steps = []) {
+  if (!steps.length) return 'нет ReAct-вызовов';
+  return steps
+    .map((step) => `${step.step_name || step.react_call} -> ${step.result_entity_name}`)
+    .join('; ');
+}
+
+function formatOutputValues(values = {}) {
+  const entries = Object.entries(values || {});
+  if (!entries.length) return 'н/д';
+  return entries.map(([key, value]) => `${key}: ${value}`).join('; ');
+}
+
+function formatResolutionOutputSlots(rules = []) {
+  if (!rules.length) return 'н/д';
+  return rules
+    .slice()
+    .sort((left, right) => (left.order || 0) - (right.order || 0))
+    .map((rule) => `${rule.order || '?'} ${rule.slot_id}${rule.required_for_success ? ' *' : ''}`)
+    .join('; ');
+}
+
+function formatMissingAutofillResultFields(fields = []) {
+  return formatList(fields, (item) => {
+    if (typeof item === 'string') return item;
+    const resultField = item.result_field || 'поле не задано';
+    const targetSlot = item.target_slot ? ` -> ${item.target_slot}` : '';
+    return `${resultField}${targetSlot}`;
+  });
+}
+
+function formatAutofillFilledSlots(item = {}) {
+  const filled = item.filled_slot_values || [];
+  if (filled.length) {
+    return filled
+      .map((slot) => `${slot.target_slot}: ${formatTraceInlineValue(slot.value)} <- ${slot.result_field}`)
+      .join('; ');
+  }
+  return formatOutputValues(item.output_values || {});
 }
 
 function launchRuntimeStatus(launch) {
@@ -498,6 +724,10 @@ function renderScenario() {
 function renderScenarioSummary() {
   const detail = state.scenarioDetail;
   const simulation = state.scenarioSimulation;
+  if (!state.workflowStarted) {
+    elements.scenarioSummary.textContent = 'Работа начнется после кнопки «Анализировать»';
+    return;
+  }
   if (!detail) {
     elements.scenarioSummary.textContent = 'Сценарий не загружен';
     return;
@@ -515,7 +745,7 @@ function renderScenarioSummary() {
     `<span>${escapeHtml(simulation?.simulation_options?.display_name || elements.testRunMode?.selectedOptions?.[0]?.textContent || 'тестовый прогон')}</span>`,
     badge(simulation?.final_decision || 'pending'),
     `<span>Недостающих слотов: ${escapeHtml(missingCount)}</span>`,
-    `<span>Вопросов оператору: ${escapeHtml(answerableCount)}</span>`,
+    `<span>Вопросов для уточнения: ${escapeHtml(answerableCount)}</span>`,
     mode.allow_llm ? '<span>LLM включен</span>' : '<span>LLM выключен</span>',
   ].join(' ');
 }
@@ -523,6 +753,10 @@ function renderScenarioSummary() {
 function renderQuestion() {
   const simulation = state.scenarioSimulation;
   const detail = state.scenarioDetail;
+  if (!state.workflowStarted) {
+    elements.questionView.innerHTML = '<div class="empty">Введите текст заявки и нажмите «Анализировать»</div>';
+    return;
+  }
   if (!simulation || !detail) {
     elements.questionView.innerHTML = '<div class="empty">Вопрос появится после проверки слотов</div>';
     return;
@@ -564,15 +798,15 @@ function renderQuestion() {
   const channel = simulation.interaction_channel || detail.interaction_channel || {};
   const questionDelivery = simulation.question_delivery || channel.question_delivery || {};
   elements.questionView.innerHTML = `
-    <div class="question-title">Нужно уточнение</div>
+    <div class="question-title">Нужно уточнение у клиента</div>
     <div class="question-text">${escapeHtml(resolutionQuestion(slot, simulation))}</div>
     <div class="question-meta">Слот: ${escapeHtml(slot.display_name || slotId)} / приоритет: ${
       escapeHtml(priorityGroupLabels[slot.priority_group] || slot.priority_group || 'н/д')
     }</div>
-    <div class="question-meta">Канал: ${escapeHtml(channel.display_name || 'н/д')} / доставка: ${escapeHtml(visibleLabels[questionDelivery.action_type] || questionDelivery.action_type || 'н/д')}</div>
+    <div class="question-meta">Канал: ${escapeHtml(channel.display_name || 'н/д')} / доставка вопроса клиенту: ${escapeHtml(visibleLabels[questionDelivery.action_type] || questionDelivery.action_type || 'н/д')}</div>
     ${resolutionMeta}
     <div class="question-input-row">
-      <input id="slotAnswerInput" autocomplete="off" placeholder="Ответ пользователя или оператора">
+      <input id="slotAnswerInput" autocomplete="off" placeholder="Ответ клиента или введенный оператором ответ">
       <button id="addSlotAnswerButton" class="primary" type="button">Записать ответ</button>
     </div>
   `;
@@ -603,6 +837,10 @@ function renderSlotAnswers() {
 
 function renderSteps() {
   const detail = state.scenarioDetail;
+  if (!state.workflowStarted) {
+    elements.stepsView.innerHTML = '<div class="empty">Сценарная работа начнется после кнопки «Анализировать»</div>';
+    return;
+  }
   if (!detail) {
     elements.stepsView.innerHTML = '<div class="empty">Сценарий не загружен</div>';
     return;
@@ -622,26 +860,52 @@ function renderSteps() {
     badge(slot.required ? 'required' : 'optional'),
     escapeHtml(fillMethodLabels[slotFillMethod(slot)] || slotFillMethod(slot)),
     badge(slotStatus(slot)),
+    escapeHtml(slotResultValue(slot)),
     escapeHtml(state.scenarioSimulation?.slot_values?.[slot.slot_id]?.confidence ?? 'н/д'),
-    escapeHtml(slotContextText(slot)),
     escapeHtml(state.scenarioSimulation?.slot_values?.[slot.slot_id]?.reason || 'н/д'),
   ]);
   const resolutionRows = (simulation?.attribute_resolution || []).map((item) => [
     escapeHtml(slotLabel(slotSchema, item.slot_id)),
     escapeHtml(item.profile_name),
     badge(item.status),
-    escapeHtml(visibleLabels[item.candidate_source?.source_type] || item.candidate_source?.source_type || 'н/д'),
+    escapeHtml(resolutionEnrichmentLabel(item.enrichment_steps || [])),
     escapeHtml(`${item.attempt || 1}/${item.max_attempts || 1}`),
     escapeHtml(resolutionProgressText(item)),
+    escapeHtml(formatOutputValues(item.output_values)),
+    escapeHtml(formatResolutionOutputSlots(item.output_slots_order)),
     escapeHtml(item.pending_question || item.fallback?.question || item.fallback?.action || 'н/д'),
-    escapeHtml(formatList(item.handoff_policy?.package)),
+    escapeHtml(formatList(item.human_resolution_policy?.handoff_package)),
+  ]);
+  const slotAutofillRows = (simulation?.slot_autofill || []).map((item) => [
+    escapeHtml(item.profile_name || item.profile_id),
+    escapeHtml(item.react_call || 'н/д'),
+    badge(item.status),
+    escapeHtml(formatAutofillFilledSlots(item)),
+    escapeHtml(formatList(item.filled_slots)),
+    escapeHtml(formatMissingAutofillResultFields(item.missing_required_result_fields)),
+    escapeHtml(item.result_summary?.source || 'н/д'),
+    escapeHtml(item.reason || 'н/д'),
+  ]);
+  const classification = simulation?.classification || {};
+  const topRouteRows = (classification.top_routes || []).map((item) => [
+    escapeHtml(item.display_name || item.route_id),
+    badge(item.route),
+    escapeHtml(item.priority || 'н/д'),
+    escapeHtml(item.confidence ?? 'н/д'),
+    escapeHtml(formatRuleHits(item.positive_hits)),
+    escapeHtml(formatRuleHits(item.negative_hits)),
   ]);
   const routeRows = [
-    ['Правила', `${escapeHtml(route.confidence?.rules_min ?? 'н/д')} / ${escapeHtml(formatList(route.rules?.keywords))}`],
+    ['Решение правил', escapeHtml(visibleLabels[classification.decision_level] || classification.decision_level || 'н/д')],
+    ['Настроенный маршрут сценария', escapeHtml(classification.configured_route_id || route.route_id || 'н/д')],
+    ['Совпадает со сценарием', escapeHtml(classification.matches_configured_route ? 'да' : 'нет')],
+    ['Порог правил', escapeHtml(route.confidence?.rules_min ?? 'н/д')],
     ['LLM few-shot', escapeHtml(route.confidence?.llm_min ?? 'н/д')],
-    ['Передача человеку ниже', escapeHtml(route.confidence?.human_handoff_below ?? 'н/д')],
+    ['Эскалация оператору ниже', escapeHtml(route.confidence?.human_handoff_below ?? 'н/д')],
     ['Top категорий', escapeHtml(route.top_categories_on_low_confidence ?? 'н/д')],
-    ['Совпадения в тексте', escapeHtml(formatList(simulation?.classification?.keyword_hits))],
+    ['Позитивные совпадения', escapeHtml(formatRuleHits(classification.positive_hits))],
+    ['Негативные совпадения', escapeHtml(formatRuleHits(classification.negative_hits))],
+    ['Блокирующие правила', escapeHtml(formatRuleHits(classification.blocked_by_rules))],
   ];
   const launchRows = (detail.tool_launches || []).map((launch) => {
     const runtime = launchRuntimeSummary(launch);
@@ -666,7 +930,7 @@ function renderSteps() {
     tool_results: 'результаты инструментов',
     agent_hypothesis: 'гипотеза агента',
     sla_remaining: 'остаток SLA',
-    user_notification: 'уведомление пользователя',
+    user_notification: 'уведомление клиента',
   };
   const conditionLabels = {
     two_tool_errors: '2 ошибки инструментов подряд',
@@ -688,13 +952,8 @@ function renderSteps() {
       ];
     })
     .filter(Boolean);
-  const executionTraceRows = (simulation?.execution_trace || []).map((item) => [
-    escapeHtml(item.step || 'н/д'),
-    badge(item.status || 'info'),
-    escapeHtml(item.title || 'н/д'),
-    escapeHtml(item.message || 'н/д'),
-  ]);
   elements.stepsView.innerHTML = [
+    renderDryRunTracePanel(simulation),
     stepBlock(
       1,
       'Приём и нормализация',
@@ -707,21 +966,23 @@ function renderSteps() {
         ${metric('Автозаполнение', escapeHtml(formatList(slotSchema.auto_fill_slots)))}
         ${metric('Таймауты', escapeHtml(`${slotSchema.timeouts?.reminder_after_seconds || 'н/д'} сек / ${slotSchema.timeouts?.draft_after_seconds || 'н/д'} сек`))}
       </div>
-      ${table(['Слот', 'Приоритет', 'Тип', 'Способ заполнения', 'Статус', 'Confidence', 'Настройка заполнения', 'Причина'], slotRows)}
-      ${resolutionRows.length ? table(['Слот', 'Профиль', 'Статус', 'Операция разрешения', 'Попытка', 'Решение dry-run', 'Следующий вопрос', 'Пакет передачи'], resolutionRows) : ''}`,
+      ${table(['Слот', 'Приоритет', 'Тип', 'Способ заполнения', 'Статус', 'Результат слота', 'Confidence', 'Причина'], slotRows)}
+      ${slotAutofillRows.length ? table(['Профиль автозаполнения', 'ReAct-вызов', 'Статус', 'Значения', 'Заполненные слоты', 'Нет обязательных полей', 'Источник', 'Причина'], slotAutofillRows) : ''}
+      ${resolutionRows.length ? table(['Слот', 'Профиль', 'Статус', 'Обогащение контекста', 'Попытка', 'Решение dry-run', 'Результаты слотов', 'Выходные слоты', 'Вопрос клиенту', 'Пакет эскалации'], resolutionRows) : ''}`,
     ),
     stepBlock(
       2,
       'Классификация и маршрутизация',
       simulation?.classification?.confidence >= 0.85 ? 'ready' : 'partial',
       `<div class="grid">
-        ${metric('Приоритет', badge(route.priority))}
-        ${metric('Маршрут', badge(route.route))}
-        ${metric('Workflow state', escapeHtml(route.workflow_state_id || 'н/д'))}
+        ${metric('Приоритет', badge(classification.priority || route.priority))}
+        ${metric('Маршрут', badge(classification.route || route.route))}
+        ${metric('Workflow state', escapeHtml(classification.workflow_state_id || route.workflow_state_id || 'н/д'))}
         ${metric('Канал', escapeHtml(channel.display_name || 'н/д'))}
-        ${metric('Confidence dry-run', escapeHtml(simulation?.classification?.confidence ?? 'н/д'))}
+        ${metric('Confidence dry-run', escapeHtml(classification.confidence ?? 'н/д'))}
       </div>
-      ${table(['Уровень', 'Значение'], routeRows)}`,
+      ${table(['Уровень', 'Значение'], routeRows)}
+      ${topRouteRows.length ? table(['Кандидат маршрута', 'Маршрут', 'Приоритет', 'Confidence', 'Позитивные признаки', 'Негативные признаки'], topRouteRows) : ''}`,
     ),
     stepBlock(
       3,
@@ -729,7 +990,7 @@ function renderSteps() {
       'ready',
       `<div class="grid">
         ${metric('Лимит итераций', escapeHtml(policy.max_iterations || 'н/д'))}
-        ${metric('Ошибок до эскалации', escapeHtml(policy.consecutive_tool_errors_to_escalate || 'н/д'))}
+        ${metric('Ошибок до эскалации оператору', escapeHtml(policy.consecutive_tool_errors_to_escalate || 'н/д'))}
         ${metric('Группы действий ReAct', escapeHtml(formatList(policy.allowed_react_action_groups, (item) => reactActionGroupLabels[item] || item)))}
         ${metric('Стоп-условия', escapeHtml(formatList(policy.stop_conditions, (item) => stopConditionLabels[item] || item)))}
       </div>`,
@@ -746,37 +1007,36 @@ function renderSteps() {
       'Решение и эскалация',
       simulation?.final_decision || 'pending',
       `<div class="grid">
-        ${metric('Автозакрытие', escapeHtml(escalation.auto_close?.requires_user_confirmation ? 'после подтверждения пользователя' : 'по политике'))}
-        ${metric('Ожидание ответа', escapeHtml(`${escalation.waiting?.auto_close_after_hours || 'н/д'} ч`))}
+        ${metric('Автозакрытие', escapeHtml(escalation.auto_close?.requires_user_confirmation ? 'после подтверждения клиента' : 'по политике'))}
+        ${metric('Ожидание ответа клиента', escapeHtml(`${escalation.waiting?.auto_close_after_hours || 'н/д'} ч`))}
         ${metric('Таймаут канала', escapeHtml(`${waitingPolicy.first_reminder_after_seconds ?? 'н/д'} сек / ${waitingPolicy.discussion_timeout_seconds ?? 'н/д'} сек`))}
-        ${metric('Нет ответа', badge(waitingPolicy.on_no_answer || 'missing'))}
-        ${metric('Действие эскалации', badge(escalationAction.action_type || 'missing'))}
+        ${metric('Клиент не ответил', badge(waitingPolicy.on_no_answer || 'missing'))}
+        ${metric('Эскалация оператору', badge(escalationAction.action_type || 'missing'))}
         ${metric('Major Incident', escapeHtml(`${escalation.major_incident?.affected_users_threshold || 'н/д'} пользователей`))}
-        ${metric('Условия передачи', escapeHtml(formatList(escalation.handoff_conditions, (item) => conditionLabels[item] || item)))}
-        ${metric('Пакет передачи', escapeHtml(formatList(escalation.handoff_package, (item) => packageLabels[item] || item)))}
+        ${metric('Условия эскалации', escapeHtml(formatList(escalation.handoff_conditions, (item) => conditionLabels[item] || item)))}
+        ${metric('Пакет эскалации', escapeHtml(formatList(escalation.handoff_package, (item) => packageLabels[item] || item)))}
+        ${metric('Ожидает клиента', badge(simulation?.awaiting_client_response ? 'yes' : 'no'))}
+        ${metric('Передано оператору', badge(simulation?.operator_escalation?.required ? 'yes' : 'no'))}
       </div>
       ${profileRows.length ? table(['Событие', 'Профиль канала', 'Действие', 'ReAct-вызов / подключение / операция'], profileRows) : ''}
       <div class="message-block">
-        <div class="metric-label">Уведомление пользователю</div>
+        <div class="metric-label">Уведомление клиенту</div>
         <p>${escapeHtml(escalation.user_notification_template || 'н/д')}</p>
-      </div>
-      ${executionTraceRows.length ? `
-        <div class="message-block">
-          <div class="metric-label">Трасса тестового прогона</div>
-          ${table(['Шаг', 'Статус', 'Событие', 'Сообщение'], executionTraceRows)}
-        </div>
-      ` : ''}`,
+      </div>`,
     ),
   ].join('');
 }
 
 function syncAnalyzeButton() {
   const answerableSlots = state.dryRunEnabled ? answerableMissingSlotIds() : [];
-  const disabled = !state.scenarioDetail || (state.dryRunEnabled && !state.scenarioSimulation) || answerableSlots.length > 0;
+  const disabled = !state.scenarios.length || !state.scenarioId || !elements.ticketText.value.trim() || answerableSlots.length > 0;
   elements.analyzeButton.disabled = disabled;
   elements.analyzeButton.title = answerableSlots.length
     ? 'Сначала ответьте на вопрос обогащения заявки'
     : '';
+  elements.enrichButton.disabled = !state.workflowStarted || !state.dryRunEnabled;
+  elements.resetSlotsButton.disabled = !state.workflowStarted;
+  elements.loadScenarioButton.disabled = !state.workflowStarted;
 }
 
 async function loadScenarios() {
@@ -787,10 +1047,8 @@ async function loadScenarios() {
       state.scenarioId = state.scenarios[0]?.scenario_id || '';
     }
     renderScenarioSelect();
-    if (state.scenarioId) {
-      await loadScenarioDetail(state.scenarioId, { resetSlots: false });
-    }
     elements.apiStatus.textContent = 'API готов';
+    renderScenario();
   } catch (error) {
     elements.apiStatus.textContent = `Ошибка API: ${error.message}`;
     elements.stepsView.innerHTML = '<div class="empty">Сценарии не загружены</div>';
@@ -804,13 +1062,16 @@ async function loadScenarioDetail(scenarioId = state.scenarioId, options = {}) {
   state.scenarioDetail = await api(`/operator/scenarios/${encodeURIComponent(scenarioId)}`);
   state.scenarioSimulation = null;
   renderScenario();
-  if (state.dryRunEnabled) {
+  if (options.simulate === true && state.dryRunEnabled) {
     await simulateScenario();
   }
 }
 
 async function simulateScenario() {
-  if (!state.scenarioId) return;
+  if (!state.workflowStarted || !state.scenarioId) {
+    renderScenario();
+    return;
+  }
   if (!state.dryRunEnabled) {
     state.scenarioSimulation = null;
     renderScenario();
@@ -822,7 +1083,7 @@ async function simulateScenario() {
     state.scenarioSimulation = await api(`/operator/scenarios/${encodeURIComponent(state.scenarioId)}/simulate`, {
       method: 'POST',
       body: JSON.stringify({
-        text: elements.ticketText.value.trim(),
+        text: state.ticketTextSnapshot,
         provided_slots: state.providedSlots,
         operator_id: elements.operatorId.value.trim() || 'operator-1',
         ...runOptions,
@@ -833,7 +1094,7 @@ async function simulateScenario() {
     state.scenarioSimulation = {
       schema_version: '1.0',
       scenario_id: state.scenarioId,
-      input_text: elements.ticketText.value.trim(),
+      input_text: state.ticketTextSnapshot,
       run_mode: runOptions.run_mode,
       simulation_options: runOptions,
       slot_values: {},
@@ -862,17 +1123,6 @@ async function simulateScenario() {
   }
 }
 
-function scheduleScenarioSimulation() {
-  if (!state.dryRunEnabled) return;
-  if (state.scenarioSimulationTimer) {
-    window.clearTimeout(state.scenarioSimulationTimer);
-  }
-  state.scenarioSimulationTimer = window.setTimeout(() => {
-    state.scenarioSimulationTimer = null;
-    simulateScenario();
-  }, 350);
-}
-
 function addSlotAnswer() {
   if (!savePendingSlotAnswer()) return;
   simulateScenario();
@@ -890,27 +1140,27 @@ function savePendingSlotAnswer() {
 
 async function refreshScenarioPreservingInput() {
   savePendingSlotAnswer();
-  await loadScenarioDetail(state.scenarioId, { resetSlots: false });
+  if (!state.workflowStarted) {
+    renderScenario();
+    return;
+  }
+  await loadScenarioDetail(state.scenarioId, { resetSlots: false, simulate: true });
 }
 
 function resetSlots() {
   state.providedSlots = {};
-  simulateScenario();
+  if (state.workflowStarted) {
+    simulateScenario();
+  } else {
+    renderScenario();
+  }
 }
 
 function setDryRunEnabled(enabled) {
   state.dryRunEnabled = enabled;
   elements.enrichButton.disabled = !enabled;
-  if (state.scenarioSimulationTimer) {
-    window.clearTimeout(state.scenarioSimulationTimer);
-    state.scenarioSimulationTimer = null;
-  }
-  if (enabled) {
-    simulateScenario();
-  } else {
-    state.scenarioSimulation = null;
-    renderScenario();
-  }
+  if (!enabled) state.scenarioSimulation = null;
+  renderScenario();
 }
 
 function firstSlotValue(slotIds) {
@@ -933,7 +1183,7 @@ function legacyScenarioForAnalyze() {
 }
 
 function formPayload() {
-  const text = elements.ticketText.value.trim();
+  const text = state.ticketTextSnapshot || elements.ticketText.value.trim();
   const slotSummary = Object.entries(state.providedSlots)
     .map(([key, value]) => `${key}: ${value}`)
     .join('; ');
@@ -1119,12 +1369,7 @@ function renderTrace() {
       if (state.activeTab === 'tools') {
         const trace = state.scenarioSimulation.execution_trace || [];
         elements.traceView.innerHTML = trace.length
-          ? trace.map((item) => `
-              <div class="trace-item">
-                <div class="trace-title">${escapeHtml(item.title)} ${badge(item.status)}</div>
-                <div class="trace-meta">Шаг ${escapeHtml(item.step)} / ${escapeHtml(item.message)}</div>
-              </div>
-            `).join('')
+          ? trace.map((item, index) => renderDryRunTraceItem(item, index)).join('')
           : '<div class="empty">Нет событий тестового прогона</div>';
         return;
       }
@@ -1145,6 +1390,18 @@ function renderTrace() {
     return;
   }
   elements.traceView.innerHTML = `<pre>${escapeHtml(JSON.stringify(state.analysis, null, 2))}</pre>`;
+}
+
+function setMainTab(tabName) {
+  state.activeMainTab = tabName || 'steps';
+  elements.mainTabs.forEach((tab) => {
+    const active = tab.dataset.mainTab === state.activeMainTab;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  elements.mainPanels.forEach((panel) => {
+    panel.hidden = panel.dataset.mainPanel !== state.activeMainTab;
+  });
 }
 
 function renderRagTrace() {
@@ -1222,8 +1479,35 @@ async function loadKnowledgeStatus() {
 }
 
 async function analyzeTicket() {
+  elements.analyzeButton.disabled = true;
+  state.workflowStarted = true;
+  state.ticketTextSnapshot = elements.ticketText.value.trim();
+  if (!state.ticketTextSnapshot) {
+    renderScenario();
+    return;
+  }
+  state.analysis = null;
+  state.approvalResults = {};
+  state.feedback = null;
+  state.caseRecord = null;
+  state.caseTimeline = null;
+  stopCasePolling();
+  renderAnalysis();
+  if (!state.scenarioDetail || state.scenarioDetail.scenario?.scenario_id !== state.scenarioId) {
+    try {
+      await loadScenarioDetail(state.scenarioId, { resetSlots: false, simulate: false });
+    } catch (error) {
+      elements.apiStatus.textContent = `Ошибка сценария: ${error.message}`;
+      renderScenario();
+      return;
+    }
+  }
+  if (state.dryRunEnabled) {
+    await simulateScenario();
+  }
   if (answerableMissingSlotIds().length) {
     renderQuestion();
+    syncAnalyzeButton();
     return;
   }
   elements.analyzeButton.disabled = true;
@@ -1395,12 +1679,27 @@ async function copyResult() {
 elements.loadScenarioButton.addEventListener('click', refreshScenarioPreservingInput);
 elements.enrichButton.addEventListener('click', simulateScenario);
 elements.resetSlotsButton.addEventListener('click', resetSlots);
-elements.scenarioSelect.addEventListener('change', (event) => loadScenarioDetail(event.target.value, { resetSlots: true }));
-elements.ticketText.addEventListener('input', scheduleScenarioSimulation);
+elements.scenarioSelect.addEventListener('change', (event) => {
+  state.scenarioId = event.target.value;
+  state.workflowStarted = false;
+  state.ticketTextSnapshot = '';
+  state.scenarioDetail = null;
+  state.scenarioSimulation = null;
+  state.providedSlots = {};
+  state.analysis = null;
+  state.approvalResults = {};
+  state.feedback = null;
+  state.caseRecord = null;
+  state.caseTimeline = null;
+  stopCasePolling();
+  renderScenario();
+  renderAnalysis();
+});
+elements.ticketText.addEventListener('input', syncAnalyzeButton);
 elements.dryRunToggle.addEventListener('change', (event) => setDryRunEnabled(event.target.checked));
 elements.testRunMode?.addEventListener('change', () => {
   syncTestRunModeDefaults();
-  scheduleScenarioSimulation();
+  syncAnalyzeButton();
 });
 [
   elements.allowLlmToggle,
@@ -1408,7 +1707,7 @@ elements.testRunMode?.addEventListener('change', () => {
   elements.allowMockToggle,
   elements.allowActionApprovalToggle,
 ].forEach((toggle) => {
-  toggle?.addEventListener('change', scheduleScenarioSimulation);
+  toggle?.addEventListener('change', syncAnalyzeButton);
 });
 elements.operatorId.addEventListener('change', () => {
   loadScenarios();
@@ -1426,8 +1725,12 @@ elements.tabs.forEach((tab) => {
     renderTrace();
   });
 });
+elements.mainTabs.forEach((tab) => {
+  tab.addEventListener('click', () => setMainTab(tab.dataset.mainTab));
+});
 
 syncTestRunModeDefaults();
+setMainTab(state.activeMainTab);
 renderAnalysis();
 renderScenario();
 loadScenarios();

@@ -86,7 +86,7 @@ for expected in [
     "resolution-operation",
     "resolution-profile-editor",
     "attribute_resolution_profiles",
-    "Способ заполнения",
+    "Как получить значение слота",
     "из данных обращения",
     "Значение уже есть в текущем обращении",
     "Путь в данных обращения",
@@ -94,10 +94,17 @@ for expected in [
     "Подсказка оператору",
     "Профиль разрешения атрибута",
     "Пороги внутри профиля",
-    "Признаки для поиска",
-    "Операция разрешения атрибута",
-    "Матрица решений",
-    "Как оценивать результат операции",
+    "Входные слоты",
+    "Обогащение контекста",
+    "Добавить шаг обогащения",
+    "enrichment-step-table",
+    "enrichment-step-edit",
+    "Имя сущности результата",
+    "entity:&lt;сущность&gt;.&lt;поле&gt;",
+    "Контракт результата",
+    "refreshEnrichmentStepCard",
+    "Выходные слоты и порядок заполнения",
+    "LLM-правила выбора, заполнения и уточнения",
 ]:
     assert expected in js, expected
 for removed in [
@@ -118,11 +125,11 @@ profiles_active = request("/admin/config/active/attribute_resolution_profiles")
 profiles = profiles_active["payload"]["profiles"]
 assert any(profile["profile_id"] == "profile.password_reset.login_from_ad" for profile in profiles), profiles_active
 login_profile = next(profile for profile in profiles if profile["profile_id"] == "profile.password_reset.login_from_ad")
-assert login_profile["candidate_source"]["tool_name"] == "search_ad_users", login_profile
-assert login_profile["result_policy"]["result_type"] == "list", login_profile
-assert login_profile["result_policy"]["list_path"] == "users", login_profile
-assert login_profile["decision_policy"]["single_result"] == "auto_fill_if_confident", login_profile
-assert any(attribute["attribute_id"] == "last_name" for attribute in login_profile["input_attributes"]), login_profile
+assert login_profile["enrichment_steps"][0]["react_call"] == "search_ad_users", login_profile
+assert login_profile["enrichment_steps"][0]["result_entity_name"] == "users", login_profile
+assert any(field["field_id"] == "login" for field in login_profile["enrichment_steps"][0]["result_fields"]), login_profile
+assert any(rule["slot_id"] == "user_id" for rule in login_profile["output_slots_order"]), login_profile
+assert login_profile["llm_resolution_script"]["script_text"], login_profile
 print("default-профили проверены")
 
 detail = request("/admin/scenarios/password_reset")
@@ -226,7 +233,8 @@ assert not any(profile["profile_id"] == "profile.ui_temp.resolution" for profile
 print("создание, модификация и удаление профилей проверены")
 
 bad_payload = copy.deepcopy(deleted["payload"])
-bad_payload["profiles"][0]["candidate_source"]["tool_name"] = "unknown_tool"
+profile_with_step = next(profile for profile in bad_payload["profiles"] if profile.get("enrichment_steps"))
+profile_with_step["enrichment_steps"][0]["react_call"] = "unknown_tool"
 bad_draft = request(
     "/admin/config/drafts",
     {
@@ -242,6 +250,13 @@ bad_validated = request(
 assert bad_validated["validation"]["status"] == "invalid", bad_validated
 assert any("unknown_tool" in error for error in bad_validated["validation"]["errors"]), bad_validated
 print("валидация профилей проверена")
+
+empty_payload = copy.deepcopy(deleted["payload"])
+empty_payload["profiles"] = []
+activate_config_payload("attribute_resolution_profiles", empty_payload, "delete-all")
+empty_profiles = request("/admin/config/active/attribute_resolution_profiles")
+assert empty_profiles["payload"]["profiles"] == [], empty_profiles
+print("пустой список профилей разрешения атрибутов разрешен")
 
 audit = request("/admin/security/audit?limit=100")
 actions = {event["action"] for event in audit["events"]}

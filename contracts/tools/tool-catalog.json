@@ -11,6 +11,10 @@
           "operation_id": "check_zabbix_status",
           "parameter_mapping": {
             "target_ref": "react:target_ref"
+          },
+          "result_mapping": {
+            "service_status": "service_status",
+            "message": "message"
           }
         },
         {
@@ -18,6 +22,10 @@
           "operation_id": "check_zabbix_status",
           "parameter_mapping": {
             "target_ref": "react:target_ref"
+          },
+          "result_mapping": {
+            "service_status": "service_status",
+            "message": "message"
           }
         },
         {
@@ -25,6 +33,10 @@
           "operation_id": "check_zabbix_status",
           "parameter_mapping": {
             "target_ref": "react:target_ref"
+          },
+          "result_mapping": {
+            "service_status": "service_status",
+            "message": "message"
           }
         }
       ],
@@ -68,7 +80,9 @@
         "approval_required_hint": false,
         "auto_execution_eligible": false,
         "max_risk_level": "low"
-      }
+      },
+      "contract_version": "1.0",
+      "contract_status": "valid"
     },
     {
       "tool_name": "search_ad_users",
@@ -85,6 +99,11 @@
             "middle_name": "react:middle_name",
             "department": "react:department",
             "employee_number": "react:employee_number"
+          },
+          "result_mapping": {
+            "candidate_count": "candidate_count",
+            "users": "users",
+            "message": "message"
           }
         },
         {
@@ -97,6 +116,11 @@
             "middle_name": "react:middle_name",
             "department": "react:department",
             "employee_number": "react:employee_number"
+          },
+          "result_mapping": {
+            "candidate_count": "candidate_count",
+            "users": "users",
+            "message": "message"
           }
         }
       ],
@@ -165,7 +189,9 @@
         "approval_required_hint": false,
         "auto_execution_eligible": false,
         "max_risk_level": "low"
-      }
+      },
+      "contract_version": "1.0",
+      "contract_status": "valid"
     },
     {
       "tool_name": "query_cmdb_object",
@@ -177,6 +203,10 @@
           "operation_id": "query_cmdb_object",
           "parameter_mapping": {
             "object_ref": "react:object_ref"
+          },
+          "result_mapping": {
+            "object_found": "object_found",
+            "message": "message"
           }
         },
         {
@@ -184,6 +214,10 @@
           "operation_id": "query_cmdb_object",
           "parameter_mapping": {
             "object_ref": "react:object_ref"
+          },
+          "result_mapping": {
+            "object_found": "object_found",
+            "message": "message"
           }
         }
       ],
@@ -192,12 +226,12 @@
         "required": [
           "object_ref"
         ],
-          "properties": {
-            "object_ref": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
+        "properties": {
+          "object_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "additionalProperties": true
       },
       "result_schema": {
@@ -226,7 +260,9 @@
         "approval_required_hint": false,
         "auto_execution_eligible": false,
         "max_risk_level": "low"
-      }
+      },
+      "contract_version": "1.0",
+      "contract_status": "valid"
     },
     {
       "tool_name": "get_service_owner",
@@ -238,6 +274,10 @@
           "operation_id": "get_service_owner",
           "parameter_mapping": {
             "target_ref": "react:target_ref"
+          },
+          "result_mapping": {
+            "owner_team": "owner_team",
+            "message": "message"
           }
         }
       ],
@@ -281,7 +321,9 @@
         "approval_required_hint": false,
         "auto_execution_eligible": false,
         "max_risk_level": "low"
-      }
+      },
+      "contract_version": "1.0",
+      "contract_status": "valid"
     },
     {
       "tool_name": "search_known_incidents",
@@ -293,6 +335,10 @@
           "operation_id": "search_known_incidents",
           "parameter_mapping": {
             "query": "react:query"
+          },
+          "result_mapping": {
+            "matches": "matches",
+            "message": "message"
           }
         },
         {
@@ -300,6 +346,10 @@
           "operation_id": "search_known_incidents",
           "parameter_mapping": {
             "query": "react:query"
+          },
+          "result_mapping": {
+            "matches": "matches",
+            "message": "message"
           }
         }
       ],
@@ -308,12 +358,12 @@
         "required": [
           "query"
         ],
-          "properties": {
-            "query": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "additionalProperties": true
       },
       "result_schema": {
@@ -346,7 +396,9 @@
         "approval_required_hint": false,
         "auto_execution_eligible": false,
         "max_risk_level": "low"
-      }
+      },
+      "contract_version": "1.0",
+      "contract_status": "valid"
     },
     {
       "tool_name": "start_systemcenter_runbook",
@@ -363,6 +415,10 @@
             "device_name": "react:device_name",
             "app_name": "react:app_name",
             "error_text": "react:error_text"
+          },
+          "result_mapping": {
+            "runbook_status": "runbook_status",
+            "message": "message"
           }
         },
         {
@@ -375,6 +431,10 @@
             "device_name": "react:device_name",
             "app_name": "react:app_name",
             "error_text": "react:error_text"
+          },
+          "result_mapping": {
+            "runbook_status": "runbook_status",
+            "message": "message"
           }
         }
       ],
@@ -444,7 +504,9 @@
         "approval_required_hint": true,
         "auto_execution_eligible": false,
         "max_risk_level": "medium"
-      }
+      },
+      "contract_version": "1.0",
+      "contract_status": "valid"
     }
   ]
 }

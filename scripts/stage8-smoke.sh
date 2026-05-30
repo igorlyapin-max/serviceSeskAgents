@@ -72,6 +72,9 @@ else:
 html = request("/operator", parse_json=False)
 assert "Оператор ServiceDesk" in html, html[:200]
 assert "Пять шагов оркестратора" in html, html[:300]
+assert 'class="operator-tabs"' in html, html[:300]
+assert 'data-main-tab="steps"' in html, html[:300]
+assert "Диагностика" in html, html[:300]
 assert "/operator/static/app.js" in html, html[:200]
 print("operator html ok")
 
@@ -79,7 +82,13 @@ js = request("/operator/static/app.js", parse_json=False)
 css = request("/operator/static/styles.css", parse_json=False)
 assert "analyzeTicket" in js, js[:200]
 assert "/operator/scenarios" in js, js[:300]
+assert "activeMainTab" in js, js[:300]
+assert "setMainTab" in js, js[:300]
+assert "workflowStarted" in js, js[:300]
+assert "ticketTextSnapshot" in js, js[:300]
 assert ".workspace" in css, css[:200]
+assert ".operator-tabs" in css, css[:300]
+assert "minmax(360px, 420px)" in css, css[:300]
 print("operator assets ok")
 
 operator_headers = {"X-ServiceDesk-Actor": "operator-1", "X-ServiceDesk-Session": "stage8:operator"}

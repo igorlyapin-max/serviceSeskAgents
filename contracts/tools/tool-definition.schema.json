@@ -11,6 +11,8 @@
     "endpoint_bindings",
     "parameters_schema",
     "result_schema",
+    "contract_version",
+    "contract_status",
     "policy"
   ],
   "properties": {
@@ -46,6 +48,20 @@
       "type": "object",
       "additionalProperties": true
     },
+    "contract_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "contract_status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "valid",
+        "broken",
+        "deprecated"
+      ]
+    },
     "policy": {
       "$ref": "#/$defs/policy"
     },
@@ -78,6 +94,14 @@
           "additionalProperties": {
             "type": "string",
             "pattern": "^(react|constant|secret):.+$"
+          }
+        },
+        "result_mapping": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
           }
         }
       }

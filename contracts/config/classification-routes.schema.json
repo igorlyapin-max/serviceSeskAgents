@@ -94,26 +94,15 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "keywords"
+              "rule_items"
             ],
             "properties": {
-              "keywords": {
+              "rule_items": {
                 "type": "array",
+                "minItems": 1,
                 "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 120
-                },
-                "uniqueItems": true
-              },
-              "negative_keywords": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 120
-                },
-                "uniqueItems": true
+                  "$ref": "#/$defs/classification_rule"
+                }
               }
             }
           },
@@ -132,6 +121,57 @@
       "minLength": 1,
       "maxLength": 160,
       "pattern": "^[a-z][a-z0-9_.-]*$"
+    },
+    "classification_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "match_type",
+        "polarity",
+        "weight",
+        "required",
+        "blocking",
+        "explanation"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "match_type": {
+          "type": "string",
+          "enum": [
+            "phrase",
+            "word",
+            "contains"
+          ]
+        },
+        "polarity": {
+          "type": "string",
+          "enum": [
+            "positive",
+            "negative"
+          ]
+        },
+        "weight": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "blocking": {
+          "type": "boolean"
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        }
+      }
     }
   }
 }

@@ -14,7 +14,6 @@
     },
     "profiles": {
       "type": "array",
-      "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -24,13 +23,11 @@
           "status",
           "description",
           "target_slot_id",
-          "output_slots",
-          "input_attributes",
-          "candidate_source",
-          "result_policy",
-          "decision_policy",
-          "clarification_policy",
-          "handoff_policy",
+          "input_slots",
+          "enrichment_steps",
+          "output_slots_order",
+          "llm_resolution_script",
+          "human_resolution_policy",
           "max_attempts",
           "audit_required",
           "log_required"
@@ -61,30 +58,31 @@
           "target_slot_id": {
             "$ref": "#/$defs/id"
           },
-          "output_slots": {
-            "$ref": "#/$defs/id_list"
+          "input_slots": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/input_slot"
+            }
           },
-          "input_attributes": {
+          "enrichment_steps": {
             "type": "array",
             "items": {
-              "$ref": "#/$defs/input_attribute"
-            },
-            "uniqueItems": true
+              "$ref": "#/$defs/enrichment_step"
+            }
           },
-          "candidate_source": {
-            "$ref": "#/$defs/candidate_source"
+          "output_slots_order": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/output_slot_rule"
+            }
           },
-          "result_policy": {
-            "$ref": "#/$defs/result_policy"
+          "llm_resolution_script": {
+            "$ref": "#/$defs/llm_resolution_script"
           },
-          "decision_policy": {
-            "$ref": "#/$defs/decision_policy"
-          },
-          "clarification_policy": {
-            "$ref": "#/$defs/clarification_policy"
-          },
-          "handoff_policy": {
-            "$ref": "#/$defs/handoff_policy"
+          "human_resolution_policy": {
+            "$ref": "#/$defs/human_resolution_policy"
           },
           "fallback": {
             "$ref": "#/$defs/fallback"
@@ -153,17 +151,91 @@
       "minLength": 1,
       "maxLength": 240
     },
-    "input_attribute": {
+    "input_slot": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "attribute_id",
-        "display_name",
-        "source",
-        "required"
+        "slot_id",
+        "required_for_operation",
+        "can_ask_user"
       ],
       "properties": {
-        "attribute_id": {
+        "slot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "required_for_operation": {
+          "type": "boolean"
+        },
+        "can_ask_user": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 600
+        }
+      }
+    },
+    "enrichment_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step_name",
+        "react_call",
+        "parameter_mapping",
+        "result_entity_name",
+        "result_entity_description",
+        "on_error"
+      ],
+      "properties": {
+        "step_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "react_call": {
+          "$ref": "#/$defs/id"
+        },
+        "result_entity_name": {
+          "$ref": "#/$defs/id"
+        },
+        "result_entity_description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "parameter_mapping": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^(slot|output|entity|constant|secret):.+$"
+          }
+        },
+        "result_fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/result_field"
+          }
+        },
+        "on_error": {
+          "type": "string",
+          "enum": [
+            "continue_to_llm",
+            "stop_and_ask_client",
+            "escalate_operator"
+          ]
+        }
+      }
+    },
+    "result_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field_id",
+        "display_name",
+        "field_type"
+      ],
+      "properties": {
+        "field_id": {
           "$ref": "#/$defs/id"
         },
         "display_name": {
@@ -171,190 +243,102 @@
           "minLength": 1,
           "maxLength": 240
         },
-        "source": {
+        "field_type": {
           "type": "string",
           "enum": [
-            "ticket_text",
-            "slot",
-            "case",
-            "llm",
-            "operator_answer",
-            "constant"
+            "string",
+            "number",
+            "boolean",
+            "object",
+            "array",
+            "unknown"
           ]
         },
-        "source_ref": {
-          "$ref": "#/$defs/source_ref"
-        },
-        "required": {
-          "type": "boolean"
-        },
-        "extraction_instruction": {
+        "description": {
           "type": "string",
-          "minLength": 1,
           "maxLength": 600
         }
       }
     },
-    "candidate_source": {
+    "output_slot_rule": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "source_type"
+        "slot_id",
+        "order",
+        "required_for_success",
+        "source_hint",
+        "fallback"
       ],
       "properties": {
-        "source_type": {
+        "slot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "required_for_success": {
+          "type": "boolean"
+        },
+        "source_hint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "fallback": {
           "type": "string",
           "enum": [
-            "react_call",
-            "ticket_history",
-            "case_data",
-            "disabled"
+            "ask_clarification",
+            "operator_handoff",
+            "leave_empty"
           ]
+        }
+      }
+    },
+    "llm_resolution_script": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "script_text",
+        "response_contract"
+      ],
+      "properties": {
+        "script_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
         },
-        "tool_name": {
-          "$ref": "#/$defs/id"
-        },
-        "endpoint_id": {
-          "$ref": "#/$defs/id"
-        },
-        "operation_id": {
-          "$ref": "#/$defs/id"
-        },
-        "parameter_mapping": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string",
-            "pattern": "^(slot|attribute|constant|secret|case|context):.+$"
-          }
-        },
-        "history_filter": {
+        "response_contract": {
           "type": "object",
           "additionalProperties": true
         }
       }
     },
-    "result_policy": {
+    "human_resolution_policy": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "result_type",
-        "target_value_path"
+        "clarification_question",
+        "clarification_slots",
+        "handoff_package",
+        "handoff_action",
+        "fallback_action"
       ],
       "properties": {
-        "result_type": {
-          "type": "string",
-          "enum": [
-            "list",
-            "object"
-          ]
-        },
-        "list_path": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 240
-        },
-        "object_path": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 240
-        },
-        "success_path": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 240
-        },
-        "target_value_path": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 240
-        },
-        "display_value_path": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 240
-        },
-        "confidence_path": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 240
-        },
-        "output_mapping": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 240
-          }
-        }
-      }
-    },
-    "decision_action": {
-      "type": "string",
-      "enum": [
-        "auto_fill_if_confident",
-        "ask_clarification",
-        "ask_disambiguation",
-        "operator_handoff",
-        "escalate",
-        "leave_empty",
-        "debug_stop"
-      ]
-    },
-    "decision_policy": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "empty_result",
-        "single_result",
-        "multiple_results",
-        "source_error",
-        "attempt_limit"
-      ],
-      "properties": {
-        "empty_result": {
-          "$ref": "#/$defs/decision_action"
-        },
-        "single_result": {
-          "$ref": "#/$defs/decision_action"
-        },
-        "multiple_results": {
-          "$ref": "#/$defs/decision_action"
-        },
-        "source_error": {
-          "$ref": "#/$defs/decision_action"
-        },
-        "attempt_limit": {
-          "$ref": "#/$defs/decision_action"
-        }
-      }
-    },
-    "clarification_policy": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "question",
-        "ask_for_attributes"
-      ],
-      "properties": {
-        "question": {
+        "clarification_question": {
           "type": "string",
           "minLength": 1,
           "maxLength": 600
         },
-        "ask_for_attributes": {
+        "clarification_slots": {
           "$ref": "#/$defs/id_list"
-        }
-      }
-    },
-    "handoff_policy": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "action",
-        "package"
-      ],
-      "properties": {
-        "action": {
+        },
+        "handoff_package": {
+          "$ref": "#/$defs/id_list"
+        },
+        "handoff_action": {
           "type": "string",
           "enum": [
             "operator_handoff",
@@ -363,8 +347,14 @@
             "leave_empty"
           ]
         },
-        "package": {
-          "$ref": "#/$defs/id_list"
+        "fallback_action": {
+          "type": "string",
+          "enum": [
+            "ask_user",
+            "operator_handoff",
+            "escalate",
+            "leave_empty"
+          ]
         }
       }
     },

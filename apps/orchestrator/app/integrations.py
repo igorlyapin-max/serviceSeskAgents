@@ -17,6 +17,26 @@ from .contracts import ContractRegistry, ContractValidationError
 RISK_ORDER = ["low", "medium", "high", "critical"]
 
 
+def value_at_path(value: Any, path: str | None) -> Any:
+    if not path:
+        return None
+    current = value
+    for part in str(path).replace("[]", "").split("."):
+        if current is None:
+            return None
+        if isinstance(current, list):
+            if part.isdigit():
+                index = int(part)
+                current = current[index] if index < len(current) else None
+            else:
+                return None
+        elif isinstance(current, dict):
+            current = current.get(part)
+        else:
+            return None
+    return current
+
+
 @dataclass(frozen=True)
 class EndpointBinding:
     tool: dict[str, Any]
@@ -272,6 +292,7 @@ class IntegrationDispatcher:
             )
 
         result = self._invoke_with_retry(adapter, invocation, binding)
+        result = self._normalize_result_output(result, binding)
         return self._require_result(result)
 
     def _binding_gate(
@@ -382,6 +403,39 @@ class IntegrationDispatcher:
             if backoff_seconds:
                 time.sleep(backoff_seconds)
 
+        return result
+
+    def _normalize_result_output(
+        self,
+        result: dict[str, Any],
+        binding: EndpointBinding,
+    ) -> dict[str, Any]:
+        if result["status"] not in {"success", "dry_run_completed"}:
+            return result
+        output = result.get("output") or {}
+        operation_validator = Draft202012Validator(binding.operation.get("response_schema", {"type": "object"}))
+        operation_errors = [
+            self.registry._format_jsonschema_error(error, prefix="endpoint_output")
+            for error in sorted(operation_validator.iter_errors(output), key=lambda item: list(item.path))
+        ]
+        if operation_errors:
+            return self._base_result(
+                result,
+                "error",
+                error={
+                    "code": "endpoint_response_contract_violation",
+                    "message": "; ".join(operation_errors),
+                },
+            )
+        mapping = binding.binding.get("result_mapping") or {}
+        if not mapping:
+            return result
+        normalized_output = dict(output)
+        for react_field, endpoint_path in mapping.items():
+            mapped_value = value_at_path(output, endpoint_path)
+            if mapped_value is not None:
+                normalized_output[react_field] = mapped_value
+        result["output"] = normalized_output
         return result
 
     def _require_result(self, result: dict[str, Any]) -> dict[str, Any]:

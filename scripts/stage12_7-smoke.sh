@@ -78,36 +78,43 @@ else:
 admin_js = request("/admin/static/app.js", parse_json=False)
 operator_js = request("/operator/static/app.js", parse_json=False)
 for expected in [
-    "Признаки для поиска",
-    "Операция разрешения атрибута",
-    "Матрица решений",
-    "Как оценивать результат операции",
-    "Пакет передачи человеку",
+    "Входные слоты",
+    "Обогащение контекста",
+    "Добавить шаг обогащения",
+    "enrichment-step-table",
+    "Имя сущности результата",
+    "entity:&lt;сущность&gt;.&lt;поле&gt;",
+    "Контракт результата",
+    "Выходные слоты и порядок заполнения",
+    "LLM-правила выбора, заполнения и уточнения",
+    "Пакет эскалации оператору",
     "Пороги внутри профиля",
     "function formatList",
+    "operationBindingLastToolName",
+    "Входные параметры endpoint",
+    "Поля ответа, доступные ReAct",
+    "Имя параметра ReAct",
 ]:
     assert expected in admin_js, expected
 for expected in [
     "resolution_state",
-    "Операция разрешения",
-    "Пакет передачи",
+    "Обогащение контекста",
+    "Пакет эскалации",
     "resolutionProgressText",
 ]:
     assert expected in operator_js, expected
-print("assets resolver-профиля проверены")
+print("assets профиля разрешения проверены")
 
 profiles_active = request("/admin/config/active/attribute_resolution_profiles")
 payload = profiles_active["payload"]
 login_profile = next(profile for profile in payload["profiles"] if profile["profile_id"] == "profile.password_reset.login_from_ad")
-assert login_profile["candidate_source"]["source_type"] == "react_call", login_profile
-assert login_profile["candidate_source"]["operation_id"] == "search_ad_users", login_profile
-assert login_profile["result_policy"]["result_type"] == "list", login_profile
-assert login_profile["result_policy"]["list_path"] == "users", login_profile
-assert login_profile["result_policy"]["output_mapping"]["user_id"] == "user_id", login_profile
-assert login_profile["decision_policy"]["multiple_results"] == "ask_disambiguation", login_profile
-assert "department" in login_profile["clarification_policy"]["ask_for_attributes"], login_profile
+assert login_profile["enrichment_steps"][0]["react_call"] == "search_ad_users", login_profile
+assert login_profile["enrichment_steps"][0]["result_entity_name"] == "users", login_profile
+assert any(field["field_id"] == "user_id" for field in login_profile["enrichment_steps"][0]["result_fields"]), login_profile
+assert any(rule["slot_id"] == "user_id" and rule["source_hint"] == "user_id" for rule in login_profile["output_slots_order"]), login_profile
+assert "user_login" in login_profile["human_resolution_policy"]["clarification_slots"], login_profile
 assert login_profile["confidence_thresholds"]["auto_fill"] >= login_profile["confidence_thresholds"]["clarification"], login_profile
-print("default resolver-профиль проверен")
+print("default профиль разрешения проверен")
 
 simulation = request(
     "/admin/scenarios/password_reset/simulate",
@@ -122,8 +129,8 @@ assert state["attempt"] == 1 and state["max_attempts"] == 2, simulation
 assert state["effective_confidence_thresholds"]["auto_accept_confidence"] >= state["effective_confidence_thresholds"]["clarification_confidence"], simulation
 assert "должность" in state["pending_question"].lower(), simulation
 assert state["decision"] == "ask_clarification", simulation
-assert state["candidate_source"]["tool_name"] == "search_ad_users", simulation
-print("dry-run состояния resolver-профиля проверен")
+assert state["enrichment_steps"][0]["react_call"] == "search_ad_users", simulation
+print("dry-run состояния профиля разрешения проверен")
 
 
 def validate_payload(candidate, label):
@@ -143,17 +150,17 @@ def validate_payload(candidate, label):
 
 
 bad_mapping = copy.deepcopy(payload)
-bad_mapping["profiles"][0]["candidate_source"]["parameter_mapping"]["login"] = "attribute:missing_identity_marker"
+bad_mapping["profiles"][0]["enrichment_steps"][0]["parameter_mapping"]["login"] = "slot:missing_identity_marker"
 validated = validate_payload(bad_mapping, "bad-mapping")
 assert validated["validation"]["status"] == "invalid", validated
 assert any("missing_identity_marker" in error for error in validated["validation"]["errors"]), validated
 
 bad_output = copy.deepcopy(payload)
-bad_output["profiles"][0]["result_policy"]["output_mapping"]["undeclared_identity_marker"] = "login"
+bad_output["profiles"][0]["target_slot_id"] = "undeclared_identity_marker"
 validated = validate_payload(bad_output, "bad-output")
 assert validated["validation"]["status"] == "invalid", validated
-assert any("undeclared_identity_marker" in error for error in validated["validation"]["errors"]), validated
-print("валидация resolver-профиля проверена")
+assert any("target_slot_id" in error for error in validated["validation"]["errors"]), validated
+print("валидация профиля разрешения проверена")
 
 print("Smoke-проверка этапа 12.7 завершена.")
 PY

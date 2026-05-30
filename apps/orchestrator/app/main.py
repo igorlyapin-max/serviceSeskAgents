@@ -1412,6 +1412,28 @@ def admin_scenario_detail(
         raise config_error_response(error) from error
 
 
+@app.get("/admin/orchestration-graph")
+def admin_orchestration_graph(
+    scenario_id: str | None = Query(default=None),
+    view: str = Query(default="scenario"),
+    context: SecurityContext = Depends(
+        permission_dependency(
+            "workflow.read",
+            action="admin.orchestration_graph.read",
+            resource_type="scenario",
+        )
+    ),
+) -> dict[str, Any]:
+    _ = context
+    try:
+        return config_store.orchestration_graph(
+            scenario_id=scenario_id,
+            view=view,
+        )
+    except ConfigRegistryError as error:
+        raise config_error_response(error) from error
+
+
 @app.post("/admin/scenarios/{scenario_id}/simulate")
 def admin_simulate_scenario(
     scenario_id: str,

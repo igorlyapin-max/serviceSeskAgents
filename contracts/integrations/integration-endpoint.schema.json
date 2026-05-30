@@ -100,6 +100,9 @@
         "method",
         "path",
         "request_schema",
+        "response_schema",
+        "contract_version",
+        "contract_status",
         "timeout_seconds"
       ],
       "properties": {
@@ -128,6 +131,24 @@
         "request_schema": {
           "type": "object",
           "additionalProperties": true
+        },
+        "response_schema": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "contract_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "contract_status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "valid",
+            "broken",
+            "deprecated"
+          ]
         },
         "timeout_seconds": {
           "type": "integer",

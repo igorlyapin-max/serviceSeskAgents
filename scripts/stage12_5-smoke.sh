@@ -80,6 +80,7 @@ assert "Сценарии" in html, html[:300]
 assert "Сценарии обработки" in html, html[:300]
 for expected_view in [
     'data-view="resolution"',
+    'data-view="orchestrationGraph"',
     'data-view="scenarioSlots"',
     'data-view="scenarioClassification"',
     'data-view="scenarioReact"',
@@ -97,6 +98,7 @@ js = request("/admin/static/app.js", parse_json=False)
 assert "renderScenarios" in js, js[:300]
 for expected_renderer in [
     "renderScenarioSlots",
+    "renderOrchestrationGraph",
     "renderScenarioClassification",
     "renderScenarioReact",
     "renderScenarioTools",
@@ -128,10 +130,10 @@ for expected_slot_text in [
     "slot-card-summary",
     "slot-card-body",
     "Priority group",
-    "Способ заполнения",
+    "Как получить значение слота",
     "из данных обращения",
     "data-fill-method-help",
-    "Вопрос пользователю",
+    "Вопрос клиенту",
     "Путь в данных обращения",
     "Инструкция для модели",
     "Запасной вопрос",
@@ -143,19 +145,74 @@ for expected_slot_text in [
     "Минимум извлечения",
     "Значение уже есть в текущем обращении",
     "Профиль разрешения атрибута",
+    "Сценарий для выбора слотов",
+    "data-resolution-slot-scenario",
+    "name=\"target_slot_id\"",
+    "name=\"input_slots\" multiple",
+    "name=\"clarification_slots\" multiple",
+    "name=\"handoff_package\" multiple",
+    "enrichment_steps",
+    "output_slots_order",
+    "llm_resolution_script",
+    "Входные слоты",
+    "Обогащение контекста",
+    "Контракт результата",
+    "Выходные слоты и порядок заполнения",
+    "LLM-правила выбора, заполнения и уточнения",
+    "Уточнение у клиента и эскалация оператору",
+    "Слоты для уточнения у клиента",
+    "Пакет эскалации оператору",
+    "Уточнения у клиента",
+    "Эскалация оператору",
     "Технический ключ поля",
     "Служебные списки",
     "Где используется",
     "slot-schema-operation",
     "route-operation",
+    "Правила классификации",
+    "До N категорий при низкой уверенности",
+    "route-rule-add",
+    "route-rule-remove",
+    "Тип совпадения",
+    "Позитивные признаки",
     "policy-operation",
     "tool-matrix-operation",
     "escalation-operation",
     "data-slot-fill-method",
+    "data-endpoint-operations-section",
+    "endpoint-operations-toggle",
+    "Нельзя удалить: сначала уберите связи",
+    "Входные параметры операции",
+    "Поля ответа операции",
+    "Тестовый ответ mock",
+    "JSON контрольная точка",
+    "Применить JSON в форму",
+    "Входные параметры endpoint",
+    "Поля ответа, доступные ReAct",
+    "Создать и привязать ReAct-вызов ИИ",
+    "operation-binding-create-editor",
+    "Нельзя отвязать: сначала уберите связи",
+    "Статус контракта",
+    "Версия контракта",
+    "Имя поля результата ReAct",
+    "Совместимость контрактов",
+    "result_mapping",
+    "response_schema",
+    "contract_version",
+    "contract_status",
+    "Граф оркестрации",
+    "graph-zoom-in",
+    "graph-zoom-out",
+    "graph-zoom-fit",
+    "data-graph-canvas",
+    "graph-config-link",
+    "readonly",
 ]:
     assert expected_slot_text in js, expected_slot_text
 assert "slots_json" not in js, js[:300]
 assert "Слоты, JSON" not in js, js[:300]
+assert "Ключевые слова" not in js, js[:300]
+assert "Негативные ключевые слова" not in js, js[:300]
 for hidden_label in [
     "ID сценария",
     "ID схемы",
@@ -173,9 +230,26 @@ assert "scenarioSimulationResult" not in js, js[:300]
 assert "section('Пакет промптов: обязательные блоки', renderPromptPackEditor(detail?.prompt_pack))" not in js, js[:300]
 operator_html = request("/operator", parse_json=False)
 assert "Тестовый прогон сценария" in operator_html, operator_html[:300]
+for expected_operator_tab in [
+    'class="operator-tabs"',
+    'data-main-tab="steps"',
+    'data-main-tab="result"',
+    'data-main-tab="case"',
+    'data-main-tab="approvals"',
+    'data-main-tab="knowledge"',
+    'data-main-tab="trace"',
+    "Диагностика",
+]:
+    assert expected_operator_tab in operator_html, expected_operator_tab
 operator_js = request("/operator/static/app.js", parse_json=False)
 assert "dryRunToggle" in operator_js, operator_js[:300]
 assert "setDryRunEnabled" in operator_js, operator_js[:300]
+assert "activeMainTab" in operator_js, operator_js[:300]
+assert "setMainTab" in operator_js, operator_js[:300]
+assert "workflowStarted" in operator_js, operator_js[:300]
+assert "ticketTextSnapshot" in operator_js, operator_js[:300]
+assert "Работа начнется после кнопки" in operator_js, operator_js[:300]
+assert "Результат слота" in operator_js, operator_js[:300]
 assert "answerableMissingSlotIds" in operator_js, operator_js[:300]
 assert "savePendingSlotAnswer" in operator_js, operator_js[:300]
 assert "refreshScenarioPreservingInput" in operator_js, operator_js[:300]
@@ -200,6 +274,8 @@ expected_domains = {
     "classification_routes",
     "orchestrator_policy",
     "tool_launch_matrix",
+    "tools",
+    "integration_endpoints",
     "prompt_packs",
     "escalation_policies",
     "attribute_resolution_profiles",
@@ -223,6 +299,35 @@ assert detail["system_confidence_defaults"]["auto_accept_confidence"] == 0.85, d
 assert "user_login" in detail["slot_confidence_thresholds"], detail
 print("карта сценария проверена")
 
+graph = request("/admin/orchestration-graph?scenario_id=password_reset&view=scenario")
+assert graph["readonly"] is True, graph
+assert graph["view"] == "scenario", graph
+assert graph["scenario_id"] == "password_reset", graph
+assert graph["nodes"], graph
+assert graph["edges"], graph
+assert all(node["readonly"] is True for node in graph["nodes"]), graph
+titles = {node["title"] for node in graph["nodes"]}
+for expected_title in [
+    "0. Слоты",
+    "1. Разрешение атрибутов",
+    "2. Классификация и маршрут",
+    "3. ReAct-планирование",
+    "4. ReAct-вызовы и матрица запуска",
+    "5. Решение и эскалация",
+    "Ожидание ответа клиента",
+    "Эскалация оператору",
+]:
+    assert expected_title in titles, expected_title
+slot_node = next(node for node in graph["nodes"] if node["id"] == "slot_filling")
+assert any(ref["view"] == "scenarioSlots" for ref in slot_node["config_refs"]), slot_node
+assert any(edge["from"] == "tool_use" and edge["to"] == "react_planning" for edge in graph["edges"]), graph
+assert any(edge["from"] == "waiting" and edge["to"] == "slot_filling" for edge in graph["edges"]), graph
+base_graph = request("/admin/orchestration-graph?view=base")
+assert base_graph["readonly"] is True, base_graph
+assert base_graph["view"] == "base", base_graph
+assert base_graph["scenario_id"] is None, base_graph
+print("read-only граф оркестрации проверен")
+
 simulation = request(
     "/admin/scenarios/password_reset/simulate",
     {
@@ -234,8 +339,13 @@ assert simulation["dry_run"] is True, simulation
 assert simulation["run_mode"] == "config_check", simulation
 assert simulation["simulation_options"]["allow_llm"] is False, simulation
 assert simulation["execution_trace"], simulation
-assert simulation["classification"]["keyword_hits"], simulation
+assert simulation["classification"]["positive_hits"], simulation
+assert simulation["classification"]["top_routes"], simulation
 assert "user_login" in simulation["missing_slots"], simulation
+assert simulation["next_client_question"] == simulation["next_question"], simulation
+assert simulation["awaiting_client_response"] is True, simulation
+assert simulation["client_question"]["semantic"] == "client_clarification", simulation
+assert simulation["operator_escalation"]["required"] is False, simulation
 assert simulation["final_decision"] == "continue_slot_filling", simulation
 print("тестовый прогон сценария проверен")
 
@@ -425,6 +535,44 @@ assert any("не должен иметь поле resolution_profile_id" in erro
 print("строгие поля способа заполнения slot проверены")
 
 route_active = request("/admin/config/active/classification_routes")
+legacy_route_payload = copy.deepcopy(route_active["payload"])
+legacy_route_payload["routes"][0]["rules"] = {
+    "keywords": ["пароль"],
+    "negative_keywords": ["vpn"],
+}
+legacy_route_draft = request(
+    "/admin/config/drafts",
+    {
+        "domain": "classification_routes",
+        "payload": legacy_route_payload,
+        "operator_id": "admin-stage12_5-legacy-route",
+        "base_version_id": route_active["active_version_id"],
+    },
+)
+legacy_route_validated = request(
+    f"/admin/config/drafts/{legacy_route_draft['draft_id']}/validate",
+    {"operator_id": "admin-stage12_5-legacy-route"},
+)
+assert legacy_route_validated["validation"]["status"] == "invalid", legacy_route_validated
+assert any("keywords" in error or "rule_items" in error for error in legacy_route_validated["validation"]["errors"]), legacy_route_validated
+limited_route_payload = copy.deepcopy(route_active["payload"])
+limited_route_payload["routes"] = limited_route_payload["routes"][:2]
+for route in limited_route_payload["routes"]:
+    route["top_categories_on_low_confidence"] = 3
+limited_route_draft = request(
+    "/admin/config/drafts",
+    {
+        "domain": "classification_routes",
+        "payload": limited_route_payload,
+        "operator_id": "admin-stage12_5-limited-routes",
+        "base_version_id": route_active["active_version_id"],
+    },
+)
+limited_route_validated = request(
+    f"/admin/config/drafts/{limited_route_draft['draft_id']}/validate",
+    {"operator_id": "admin-stage12_5-limited-routes"},
+)
+assert limited_route_validated["validation"]["status"] == "valid", limited_route_validated
 route_payload = copy.deepcopy(route_active["payload"])
 for route in route_payload["routes"]:
     if route["route_id"] == "route.password_reset":
@@ -543,6 +691,126 @@ for domain in sorted(expected_domains):
     assert validated["validation"]["status"] == "valid", validated
 print("валидация сценарных доменов проверена")
 
+tools_active = request("/admin/config/active/tools")
+
+visible_contract_payload = copy.deepcopy(tools_active["payload"])
+search_tool = next(tool for tool in visible_contract_payload["tools"] if tool["tool_name"] == "search_ad_users")
+search_tool["parameters_schema"] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["login"],
+    "properties": {
+        "login": {"type": "string", "minLength": 1},
+        "department": {"type": "string", "minLength": 1},
+    },
+}
+search_tool["result_schema"] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["users"],
+    "properties": {
+        "users": {
+            "type": "array",
+            "items": {"type": "object", "additionalProperties": True},
+        }
+    },
+}
+for binding in search_tool["endpoint_bindings"]:
+    if binding["operation_id"] == "search_ad_users":
+        binding["parameter_mapping"] = {
+            "login": "react:login",
+            "department": "react:department",
+        }
+        binding["result_mapping"] = {"users": "users"}
+visible_contract_draft = request(
+    "/admin/config/drafts",
+    {
+        "domain": "tools",
+        "payload": visible_contract_payload,
+        "operator_id": "admin-stage12_5-visible-react-contract",
+    },
+)
+visible_contract_validated = request(
+    f"/admin/config/drafts/{visible_contract_draft['draft_id']}/validate",
+    {"operator_id": "admin-stage12_5-visible-react-contract"},
+)
+assert visible_contract_validated["validation"]["status"] == "valid", visible_contract_validated
+
+bad_tools_payload = copy.deepcopy(tools_active["payload"])
+zabbix_tool = next(tool for tool in bad_tools_payload["tools"] if tool["tool_name"] == "check_zabbix_status")
+mock_binding = next(binding for binding in zabbix_tool["endpoint_bindings"] if binding["endpoint_id"] == "mock")
+mock_binding["result_mapping"].pop("message", None)
+bad_tools_draft = request(
+    "/admin/config/drafts",
+    {
+        "domain": "tools",
+        "payload": bad_tools_payload,
+        "operator_id": "admin-stage12_5-bad-result-mapping",
+    },
+)
+bad_tools_validated = request(
+    f"/admin/config/drafts/{bad_tools_draft['draft_id']}/validate",
+    {"operator_id": "admin-stage12_5-bad-result-mapping"},
+)
+assert bad_tools_validated["validation"]["status"] == "invalid", bad_tools_validated
+assert any("обязательное поле результата" in error and "message" in error for error in bad_tools_validated["validation"]["errors"]), bad_tools_validated
+
+bad_broken_tool_payload = copy.deepcopy(tools_active["payload"])
+broken_tool = next(tool for tool in bad_broken_tool_payload["tools"] if tool["tool_name"] == "check_zabbix_status")
+broken_tool["contract_status"] = "broken"
+bad_broken_tool_draft = request(
+    "/admin/config/drafts",
+    {
+        "domain": "tools",
+        "payload": bad_broken_tool_payload,
+        "operator_id": "admin-stage12_5-broken-react-contract",
+    },
+)
+bad_broken_tool_validated = request(
+    f"/admin/config/drafts/{bad_broken_tool_draft['draft_id']}/validate",
+    {"operator_id": "admin-stage12_5-broken-react-contract"},
+)
+assert bad_broken_tool_validated["validation"]["status"] == "invalid", bad_broken_tool_validated
+assert any("contract_status=broken" in error for error in bad_broken_tool_validated["validation"]["errors"]), bad_broken_tool_validated
+
+endpoints_active = request("/admin/config/active/integration_endpoints")
+bad_endpoint_payload = copy.deepcopy(endpoints_active["payload"])
+bad_endpoint_operation = next(endpoint for endpoint in bad_endpoint_payload["endpoints"] if endpoint["endpoint_id"] == "mock")["operations"]["check_zabbix_status"]
+bad_endpoint_operation["mock_output"]["message"] = 123
+bad_endpoint_draft = request(
+    "/admin/config/drafts",
+    {
+        "domain": "integration_endpoints",
+        "payload": bad_endpoint_payload,
+        "operator_id": "admin-stage12_5-bad-response-schema",
+    },
+)
+bad_endpoint_validated = request(
+    f"/admin/config/drafts/{bad_endpoint_draft['draft_id']}/validate",
+    {"operator_id": "admin-stage12_5-bad-response-schema"},
+)
+assert bad_endpoint_validated["validation"]["status"] == "invalid", bad_endpoint_validated
+assert any("mock_output не соответствует response_schema" in error for error in bad_endpoint_validated["validation"]["errors"]), bad_endpoint_validated
+
+bad_broken_endpoint_payload = copy.deepcopy(endpoints_active["payload"])
+broken_endpoint_operation = next(endpoint for endpoint in bad_broken_endpoint_payload["endpoints"] if endpoint["endpoint_id"] == "mock")["operations"]["check_zabbix_status"]
+broken_endpoint_operation["contract_status"] = "broken"
+bad_broken_endpoint_draft = request(
+    "/admin/config/drafts",
+    {
+        "domain": "integration_endpoints",
+        "payload": bad_broken_endpoint_payload,
+        "operator_id": "admin-stage12_5-broken-endpoint-contract",
+    },
+)
+bad_broken_endpoint_validated = request(
+    f"/admin/config/drafts/{bad_broken_endpoint_draft['draft_id']}/validate",
+    {"operator_id": "admin-stage12_5-broken-endpoint-contract"},
+)
+assert bad_broken_endpoint_validated["validation"]["status"] == "invalid", bad_broken_endpoint_validated
+assert any("contract_status=broken" in error for error in bad_broken_endpoint_validated["validation"]["errors"]), bad_broken_endpoint_validated
+print("валидация контрактов ReAct-вызовов и endpoint-операций проверена")
+
 matrix_active = request("/admin/config/active/tool_launch_matrix")
 bad_matrix = copy.deepcopy(matrix_active["payload"])
 bad_matrix["matrices"][0]["launches"][0]["execution_level"] = "auto"
@@ -562,7 +830,7 @@ assert bad_validated["validation"]["status"] == "invalid", bad_validated
 assert any("не может быть auto" in error for error in bad_validated["validation"]["errors"]), bad_validated
 print("guard матрицы запуска инструментов проверен")
 
-audit = request("/admin/security/audit?limit=100")
+audit = request("/admin/security/audit?limit=300")
 actions = {event["action"] for event in audit["events"]}
 assert "admin.scenarios.simulate" in actions, audit
 print("аудит сценарного прогона проверен")

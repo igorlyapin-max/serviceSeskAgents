@@ -29,7 +29,27 @@
           "mock_output": {
             "service_status": "ok",
             "message": "Тестовая диагностика завершена."
-          }
+          },
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "service_status",
+              "message"
+            ],
+            "properties": {
+              "service_status": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         },
         "search_ad_users": {
           "display_name": "Найти пользователей AD",
@@ -78,7 +98,35 @@
               }
             ],
             "message": "Тестовый поиск пользователя в AD завершен."
-          }
+          },
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "candidate_count",
+              "users",
+              "message"
+            ],
+            "properties": {
+              "candidate_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "users": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         },
         "query_cmdb_object": {
           "display_name": "Запросить объект CMDB",
@@ -102,7 +150,26 @@
           "mock_output": {
             "object_found": true,
             "message": "Тестовый поиск объекта CMDB завершен."
-          }
+          },
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "object_found",
+              "message"
+            ],
+            "properties": {
+              "object_found": {
+                "type": "boolean"
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         },
         "get_service_owner": {
           "display_name": "Получить владельца сервиса",
@@ -126,7 +193,27 @@
           "mock_output": {
             "owner_team": "L2-platform",
             "message": "Тестовый поиск владельца завершен."
-          }
+          },
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "owner_team",
+              "message"
+            ],
+            "properties": {
+              "owner_team": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         },
         "search_known_incidents": {
           "display_name": "Найти известные инциденты",
@@ -150,7 +237,30 @@
           "mock_output": {
             "matches": [],
             "message": "Тестовый поиск известных инцидентов завершен."
-          }
+          },
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "matches",
+              "message"
+            ],
+            "properties": {
+              "matches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         },
         "start_systemcenter_runbook": {
           "display_name": "Запустить ранбук System Center",
@@ -200,7 +310,27 @@
           "mock_output": {
             "runbook_status": "accepted",
             "message": "Тестовый запуск ранбука принят."
-          }
+          },
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "runbook_status",
+              "message"
+            ],
+            "properties": {
+              "runbook_status": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         }
       }
     },
@@ -261,7 +391,27 @@
             },
             "additionalProperties": true
           },
-          "timeout_seconds": 15
+          "timeout_seconds": 15,
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "runbook_status",
+              "message"
+            ],
+            "properties": {
+              "runbook_status": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         },
         "search_ad_users": {
           "display_name": "Найти пользователей AD",
@@ -298,7 +448,35 @@
             },
             "additionalProperties": true
           },
-          "timeout_seconds": 15
+          "timeout_seconds": 15,
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "candidate_count",
+              "users",
+              "message"
+            ],
+            "properties": {
+              "candidate_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "users": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         },
         "check_zabbix_status": {
           "display_name": "Проверить статус Zabbix",
@@ -318,7 +496,27 @@
             },
             "additionalProperties": true
           },
-          "timeout_seconds": 15
+          "timeout_seconds": 15,
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "service_status",
+              "message"
+            ],
+            "properties": {
+              "service_status": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         }
       }
     },
@@ -352,7 +550,27 @@
             },
             "additionalProperties": true
           },
-          "timeout_seconds": 10
+          "timeout_seconds": 10,
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "service_status",
+              "message"
+            ],
+            "properties": {
+              "service_status": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         }
       }
     },
@@ -386,7 +604,26 @@
             },
             "additionalProperties": true
           },
-          "timeout_seconds": 10
+          "timeout_seconds": 10,
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "object_found",
+              "message"
+            ],
+            "properties": {
+              "object_found": {
+                "type": "boolean"
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         }
       }
     },
@@ -394,7 +631,8 @@
       "endpoint_id": "queue.known_incidents",
       "adapter_type": "queue",
       "display_name": "Заготовка очереди поиска известных инцидентов",
-      "enabled": true,
+      "enabled": false,
+      "disabled_reason": "Queue adapter пока не исполняется в MVP; используйте mock или n8n webhook.",
       "operations": {
         "search_known_incidents": {
           "display_name": "Найти известные инциденты через очередь",
@@ -414,7 +652,30 @@
             },
             "additionalProperties": true
           },
-          "timeout_seconds": 10
+          "timeout_seconds": 10,
+          "response_schema": {
+            "type": "object",
+            "required": [
+              "matches",
+              "message"
+            ],
+            "properties": {
+              "matches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "contract_version": "1.0",
+          "contract_status": "valid"
         }
       }
     }

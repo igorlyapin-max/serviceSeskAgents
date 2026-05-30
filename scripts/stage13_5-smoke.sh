@@ -86,15 +86,16 @@ for expected in [
     "interaction-channel-editor",
     "Канал по умолчанию",
     "Разрешенные каналы",
-    "Ожидание ответа",
-    "Незавершенное обсуждение",
+    "Уточнения у клиента",
+    "Что делать с незавершенным уточнением",
+    "Эскалация оператору",
 ]:
     assert expected in admin_js, expected
 for removed in ["агент + Л1", "Л1 + подсказка", "Л2 + Major Incident", "Пакет Л2", "Пакет Л1"]:
     assert removed not in admin_js, removed
     assert removed not in operator_js, removed
 assert "Канал:" in operator_js, operator_js[:500]
-assert "Действие эскалации" in operator_js, operator_js[:500]
+assert "Эскалация оператору" in operator_js, operator_js[:500]
 print("assets каналов взаимодействия проверены")
 
 domains = request("/admin/config/domains")

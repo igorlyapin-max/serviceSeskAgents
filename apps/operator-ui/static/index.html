@@ -80,60 +80,95 @@
           <div id="slotAnswers" class="slot-answer-list"></div>
         </section>
 
-        <section class="steps-pane" aria-labelledby="steps-title">
-          <div class="section-head">
-            <h2 id="steps-title">Пять шагов оркестратора</h2>
-            <div id="scenarioSummary" class="summary-line">Сценарий загружается</div>
-          </div>
-          <div id="stepsView" class="steps-view"></div>
-        </section>
+        <section class="detail-pane" aria-label="Детали обработки">
+          <nav class="operator-tabs" role="tablist" aria-label="Разделы панели оператора">
+            <button class="operator-tab active" data-main-tab="steps" type="button" role="tab" aria-selected="true">5 шагов</button>
+            <button class="operator-tab" data-main-tab="result" type="button" role="tab" aria-selected="false">Результат</button>
+            <button class="operator-tab" data-main-tab="case" type="button" role="tab" aria-selected="false">Кейс</button>
+            <button class="operator-tab" data-main-tab="approvals" type="button" role="tab" aria-selected="false">Согласования</button>
+            <button class="operator-tab" data-main-tab="knowledge" type="button" role="tab" aria-selected="false">База знаний</button>
+            <button class="operator-tab" data-main-tab="trace" type="button" role="tab" aria-selected="false">Трассировка</button>
+          </nav>
 
-        <section class="result-pane" aria-labelledby="result-title">
-          <div class="section-head">
-            <h2 id="result-title">Результат</h2>
-            <button id="copyButton" type="button" disabled>Копировать</button>
+          <div class="operator-tab-panel" data-main-panel="steps" role="tabpanel">
+            <section class="steps-pane" aria-labelledby="steps-title">
+              <div class="section-head">
+                <h2 id="steps-title">Пять шагов оркестратора</h2>
+                <div id="scenarioSummary" class="summary-line">Сценарий загружается</div>
+              </div>
+              <div id="stepsView" class="steps-view"></div>
+            </section>
           </div>
-          <div id="summaryView" class="summary-grid"></div>
-          <div id="caseView" class="case-panel">
-            <div id="caseStatus" class="case-status">Нет кейса</div>
-            <div id="caseTimeline" class="timeline-list"></div>
-          </div>
-          <div id="approvalView" class="approval-list"></div>
-          <div id="feedbackView" class="feedback-panel">
-            <div class="feedback-actions">
-              <button type="button" data-feedback-rating="correct" disabled>Верно</button>
-              <button type="button" data-feedback-rating="incorrect" disabled>Неверно</button>
-              <button type="button" data-feedback-rating="edited" disabled>Исправлено</button>
-            </div>
-            <textarea id="feedbackNote" rows="3" placeholder="Заметка оператора"></textarea>
-            <textarea id="correctedResponse" rows="4" placeholder="Исправленный ответ для варианта «Исправлено»"></textarea>
-            <div id="feedbackStatus" class="feedback-status">Обратная связь не сохранена</div>
-          </div>
-          <pre id="copyText" class="copy-text" aria-live="polite"></pre>
-        </section>
 
-        <section class="knowledge-pane" aria-labelledby="knowledge-title">
-          <div class="section-head">
-            <h2 id="knowledge-title">База знаний</h2>
-            <button id="rebuildButton" type="button">Перестроить</button>
+          <div class="operator-tab-panel" data-main-panel="result" role="tabpanel" hidden>
+            <section class="result-pane" aria-labelledby="result-title">
+              <div class="section-head">
+                <h2 id="result-title">Результат</h2>
+                <button id="copyButton" type="button" disabled>Копировать</button>
+              </div>
+              <div id="summaryView" class="summary-grid"></div>
+              <div id="feedbackView" class="feedback-panel">
+                <div class="feedback-actions">
+                  <button type="button" data-feedback-rating="correct" disabled>Верно</button>
+                  <button type="button" data-feedback-rating="incorrect" disabled>Неверно</button>
+                  <button type="button" data-feedback-rating="edited" disabled>Исправлено</button>
+                </div>
+                <textarea id="feedbackNote" rows="3" placeholder="Заметка оператора"></textarea>
+                <textarea id="correctedResponse" rows="4" placeholder="Исправленный ответ для варианта «Исправлено»"></textarea>
+                <div id="feedbackStatus" class="feedback-status">Обратная связь не сохранена</div>
+              </div>
+              <pre id="copyText" class="copy-text" aria-live="polite"></pre>
+            </section>
           </div>
-          <div id="knowledgeStatus" class="status-grid"></div>
-        </section>
 
-        <section class="trace-pane" aria-labelledby="trace-title">
-          <div class="section-head">
-            <h2 id="trace-title">Трассировка</h2>
-            <div class="tabs" role="tablist" aria-label="Виды трассировки">
-              <button class="tab active" data-tab="rag" type="button">RAG</button>
-              <button class="tab" data-tab="tools" type="button">Инструменты</button>
-              <button class="tab" data-tab="json" type="button">JSON</button>
-            </div>
+          <div class="operator-tab-panel" data-main-panel="case" role="tabpanel" hidden>
+            <section class="case-pane" aria-labelledby="case-title">
+              <div class="section-head">
+                <h2 id="case-title">Кейс</h2>
+              </div>
+              <div id="caseView" class="case-panel">
+                <div id="caseStatus" class="case-status">Нет кейса</div>
+                <div id="caseTimeline" class="timeline-list"></div>
+              </div>
+            </section>
           </div>
-          <div id="traceView" class="trace-view"></div>
+
+          <div class="operator-tab-panel" data-main-panel="approvals" role="tabpanel" hidden>
+            <section class="approval-pane" aria-labelledby="approval-title">
+              <div class="section-head">
+                <h2 id="approval-title">Согласования</h2>
+              </div>
+              <div id="approvalView" class="approval-list"></div>
+            </section>
+          </div>
+
+          <div class="operator-tab-panel" data-main-panel="knowledge" role="tabpanel" hidden>
+            <section class="knowledge-pane" aria-labelledby="knowledge-title">
+              <div class="section-head">
+                <h2 id="knowledge-title">База знаний</h2>
+                <button id="rebuildButton" type="button">Перестроить</button>
+              </div>
+              <div id="knowledgeStatus" class="status-grid"></div>
+            </section>
+          </div>
+
+          <div class="operator-tab-panel" data-main-panel="trace" role="tabpanel" hidden>
+            <section class="trace-pane" aria-labelledby="trace-title">
+              <div class="section-head">
+                <h2 id="trace-title">Трассировка</h2>
+                <div class="tabs" role="tablist" aria-label="Виды трассировки">
+                  <button class="tab active" data-tab="rag" type="button">RAG</button>
+                  <button class="tab" data-tab="tools" type="button">Инструменты</button>
+                  <button class="tab" data-tab="json" type="button">Диагностика</button>
+                </div>
+              </div>
+              <div id="traceView" class="trace-view"></div>
+            </section>
+          </div>
         </section>
       </main>
     </div>
 
-    <script src="/operator/static/app.js"></script>
+    <script src="/operator/static/app.js?v=stage13_40_autofill_trace_values"></script>
   </body>
 </html>

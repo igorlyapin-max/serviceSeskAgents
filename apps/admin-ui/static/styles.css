@@ -105,9 +105,15 @@ label {
 }
 
 .sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
   border-right: 1px solid var(--line);
   background: #ffffff;
   padding: 18px 14px;
+  z-index: 30;
 }
 
 .brand {
@@ -183,6 +189,9 @@ label {
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 25;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -214,6 +223,9 @@ label {
 }
 
 .notice {
+  position: sticky;
+  top: 72px;
+  z-index: 24;
   margin: 16px 22px 0;
   border: 1px solid #fde68a;
   border-radius: 8px;
@@ -239,6 +251,10 @@ label {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.section-head.actions-only {
+  justify-content: flex-end;
 }
 
 .section-title {
@@ -330,6 +346,25 @@ label {
   line-height: 1.35;
 }
 
+.boolean-flag {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px 10px;
+  min-height: 37px;
+}
+
+.boolean-flag input[type="checkbox"] {
+  justify-self: end;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+}
+
+.boolean-flag .field-help {
+  grid-column: 1 / -1;
+}
+
 .choice-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -404,6 +439,30 @@ label {
 
 .slot-card-summary::-webkit-details-marker {
   display: none;
+}
+
+.endpoint-operations-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.endpoint-operations-summary::-webkit-details-marker {
+  display: none;
+}
+
+.endpoint-operations-summary::before {
+  content: ">";
+  color: var(--muted);
+  font-weight: 900;
+  transition: transform 120ms ease;
+}
+
+.endpoint-operations-toggle[open] > .endpoint-operations-summary::before {
+  transform: rotate(90deg);
 }
 
 .slot-card-summary-main {
@@ -530,6 +589,11 @@ label {
   align-items: start;
 }
 
+.parameter-binding-header.compact-three,
+.parameter-binding-row.compact-three {
+  grid-template-columns: minmax(170px, 1fr) minmax(160px, 0.75fr) minmax(260px, 1.25fr);
+}
+
 .parameter-binding-header {
   color: var(--muted);
   font-size: 11px;
@@ -541,6 +605,32 @@ label {
   border-radius: 8px;
   background: #ffffff;
   padding: 10px;
+}
+
+.contract-field-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.operation-contract-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.contract-field-row {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.operation-contract-row {
+  align-items: stretch;
 }
 
 .parameter-binding-meta {
@@ -558,6 +648,102 @@ label {
   color: var(--muted);
   font-size: 11px;
   font-weight: 650;
+}
+
+.enrichment-builder {
+  gap: 10px;
+}
+
+.enrichment-step-table {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.enrichment-step-header,
+.enrichment-step-row {
+  display: grid;
+  grid-template-columns: 42px minmax(170px, 1.2fr) minmax(180px, 1.2fr) minmax(120px, 0.8fr) minmax(150px, 0.9fr) minmax(150px, auto);
+  gap: 8px;
+  align-items: center;
+}
+
+.enrichment-step-header {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 8px;
+}
+
+.enrichment-step-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.enrichment-step-card.active {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.enrichment-step-row {
+  padding: 8px;
+}
+
+.enrichment-step-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.enrichment-step-row strong,
+.enrichment-step-row small {
+  display: block;
+}
+
+.enrichment-step-row small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.enrichment-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  font-weight: 800;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.enrichment-step-editor {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 10px;
+  background: #ffffff;
+}
+
+.enrichment-editor-main {
+  gap: 10px;
+}
+
+.enrichment-param-table .parameter-binding-row {
+  padding: 8px;
+}
+
+.enrichment-result-contract {
+  background: #ffffff;
 }
 
 .scenario-title {
@@ -671,14 +857,202 @@ tr:last-child td {
   gap: 16px;
 }
 
+.graph-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 16px;
+  align-items: start;
+}
+
+.graph-board {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.graph-toolbar {
+  grid-template-columns: minmax(180px, 240px) minmax(240px, 1fr) auto;
+}
+
+.graph-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  padding: 10px;
+}
+
+.graph-controls button {
+  min-width: 38px;
+  padding: 0 10px;
+}
+
+.graph-canvas {
+  height: 560px;
+  overflow: hidden;
+  background: #f8fafc;
+  cursor: grab;
+  touch-action: none;
+}
+
+.graph-canvas:active {
+  cursor: grabbing;
+}
+
+.orchestration-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.graph-edge path {
+  fill: none;
+  stroke: #7c8da3;
+  stroke-width: 2;
+}
+
+.graph-edge.support path {
+  stroke: #94a3b8;
+  stroke-dasharray: 6 5;
+}
+
+.graph-edge.loop path {
+  stroke: var(--amber);
+  stroke-dasharray: 4 4;
+}
+
+.graph-edge marker path,
+#graph-arrow path {
+  fill: #7c8da3;
+}
+
+.graph-edge text {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+  paint-order: stroke;
+  stroke: #f8fafc;
+  stroke-linejoin: round;
+  stroke-width: 4px;
+}
+
+.graph-node {
+  cursor: pointer;
+}
+
+.graph-node rect {
+  fill: #fff;
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+
+.graph-node.selected rect {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.graph-node.missing rect,
+.graph-node.invalid rect,
+.graph-node.error rect {
+  stroke: var(--red);
+}
+
+.graph-node.partial rect,
+.graph-node.pending rect {
+  stroke: var(--amber);
+}
+
+.graph-node-step {
+  fill: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.graph-node-title {
+  fill: var(--text);
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.graph-node-meta {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.graph-node-status {
+  fill: var(--green);
+}
+
+.graph-node.missing .graph-node-status,
+.graph-node.invalid .graph-node-status,
+.graph-node.error .graph-node-status {
+  fill: var(--red);
+}
+
+.graph-node.partial .graph-node-status,
+.graph-node.pending .graph-node-status {
+  fill: var(--amber);
+}
+
+.graph-details {
+  position: sticky;
+  top: 88px;
+}
+
+.graph-details h3 {
+  margin: 4px 0 8px;
+  font-size: 17px;
+  letter-spacing: 0;
+}
+
+.graph-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.graph-metrics .metric {
+  min-height: 74px;
+}
+
+.graph-ref-list {
+  display: grid;
+  gap: 10px;
+}
+
+.graph-ref-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.graph-ref-list li span {
+  color: var(--muted);
+  font-size: 12px;
+  grid-column: 1 / 2;
+}
+
+.graph-ref-list li button {
+  grid-column: 2 / 3;
+  grid-row: 1 / 3;
+}
+
 @media (max-width: 1120px) {
   .grid,
   .grid.three {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .split {
+  .split,
+  .graph-workspace {
     grid-template-columns: 1fr;
+  }
+
+  .graph-details {
+    position: static;
   }
 }
 
@@ -688,8 +1062,16 @@ tr:last-child td {
   }
 
   .sidebar {
+    position: static;
+    height: auto;
+    overflow: visible;
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  .topbar,
+  .notice {
+    position: static;
   }
 
   .nav-list {
@@ -709,12 +1091,23 @@ tr:last-child td {
   .admin-actions,
   .toolbar,
   .toolbar.compact,
+  .graph-toolbar,
   .scenario-menu,
   .parameter-binding-header,
   .parameter-binding-row,
+  .enrichment-step-header,
+  .enrichment-step-row,
   .grid,
   .grid.two,
   .grid.three {
     grid-template-columns: 1fr;
+  }
+
+  .enrichment-step-header {
+    display: none;
+  }
+
+  .row-actions {
+    justify-content: flex-start;
   }
 }

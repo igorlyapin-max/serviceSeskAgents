@@ -5,6 +5,8 @@ const state = {
   scenarioOperation: 'modify',
   slotSchemaId: 'slot.password_reset',
   slotSchemaOperation: 'modify',
+  slotAutofillProfileId: '',
+  slotAutofillOperation: 'modify',
   routeId: 'route.password_reset',
   routeOperation: 'modify',
   policyId: 'policy.password_reset',
@@ -19,13 +21,24 @@ const state = {
   interactionChannelOperation: 'modify',
   resolutionProfileId: 'profile.password_reset.login_from_ad',
   resolutionOperation: 'modify',
+  resolutionSlotScenarioId: 'password_reset',
+  resolutionSlotProfileId: '',
+  resolutionEnrichmentEditIndex: 0,
   integrationEndpointId: 'mock',
   integrationEndpointOperation: 'modify',
   toolCatalogName: 'start_systemcenter_runbook',
   toolCatalogOperation: 'modify',
   operationBindingToolName: 'start_systemcenter_runbook',
+  operationBindingLastToolName: '',
+  operationBindingMode: 'bind',
   operationBindingEndpointId: 'mock',
   operationBindingOperationId: 'start_systemcenter_runbook',
+  orchestrationGraphView: 'scenario',
+  orchestrationGraphScenarioId: 'password_reset',
+  orchestrationGraphSelectedNodeId: 'slot_filling',
+  orchestrationGraphZoom: 0.78,
+  orchestrationGraphPanX: 24,
+  orchestrationGraphPanY: 34,
   modelRoutingBaseVersionId: '',
   lastData: {
     toolCatalog: [],
@@ -36,7 +49,9 @@ const state = {
 const viewTitles = {
   dashboard: 'Панель обзора',
   scenarios: 'Сценарии',
+  orchestrationGraph: 'Граф оркестрации',
   scenarioSlots: '0. Слоты',
+  slotAutofill: '0.1 Автозаполнение слотов',
   scenarioClassification: '2. Классификация и маршрут',
   scenarioReact: '3. ReAct-планирование',
   scenarioTools: '4. ReAct-вызовы и матрица запуска',
@@ -88,9 +103,9 @@ const visibleLabels = {
   ready: 'готово',
   incomplete: 'неполно',
   auto: 'авто',
-  ask_user: 'спросить пользователя',
+  ask_user: 'спросить клиента',
   operator_approval: 'согласование оператора',
-  operator_handoff: 'передать оператору',
+  operator_handoff: 'эскалировать оператору',
   approver_approval: 'согласование руководителя',
   case: 'из данных обращения',
   llm_extraction: 'извлечение моделью',
@@ -103,8 +118,8 @@ const visibleLabels = {
   online_interactive: 'онлайн-интерактивный',
   offline_interactive: 'офлайн-интерактивный',
   debug: 'отладочный режим',
-  ask_end_user: 'вопрос пользователю',
-  ask_operator: 'вопрос оператору',
+  ask_end_user: 'вопрос клиенту',
+  ask_operator: 'вопрос через оператора',
   show_debug_message: 'показать в отладке',
   save_context: 'сохранить контекст',
   create_draft: 'создать черновик',
@@ -112,34 +127,35 @@ const visibleLabels = {
   call_specialist: 'позвать специалиста',
   notify_on_call: 'оповестить дежурных',
   debug_stop: 'остановить с сообщением',
-  standard_handoff: 'обычная передача',
-  no_answer: 'нет ответа',
+  standard_handoff: 'эскалация оператору',
+  no_answer: 'нет ответа клиента',
   policy_blocked: 'policy blocked',
   operator_manual: 'ручное заполнение оператором',
+  slot_autofill: 'ReAct-автозаполнение',
   resolution_pending: 'ожидает разрешения',
   resolution_profile: 'профиль разрешения',
-  user_question: 'вопрос пользователю',
+  user_question: 'вопрос клиенту',
   llm_extract: 'извлечение из текста моделью',
   rag_search: 'поиск в базе знаний',
   case_read: 'чтение из данных обращения',
   tool_call: 'ReAct-вызов ИИ',
   ticket_history_search: 'поиск по истории заявок',
   condition: 'условие',
-  clarification: 'уточняющий вопрос',
+  clarification: 'уточнение у клиента',
   fill_slot: 'заполнение слота',
   escalate: 'эскалация',
   sequential: 'последовательно',
   branching: 'с ветвлениями',
   profile: 'на профиль',
   step: 'на шаг',
-  clarification_required: 'нужно уточнение',
+  clarification_required: 'нужно уточнение у клиента',
   all_required_slots_filled: 'все обязательные слоты заполнены',
   tool_success: 'успешный результат ReAct-вызова',
-  handoff_required: 'требуется передача',
+  handoff_required: 'требуется эскалация оператору',
   iteration_limit: 'лимит итераций',
   consecutive_tool_errors: 'ошибки ReAct-вызовов подряд',
   slot: 'слот',
-  react: 'параметр вызова',
+  react: 'параметр ReAct-вызова',
   constant: 'константа',
   secret: 'секрет',
   context: 'контекст',
@@ -148,7 +164,7 @@ const visibleLabels = {
   external_status_check: 'проверка внешних систем',
   action_preparation: 'подготовка действия',
   state_changing_actions: 'действия с изменением состояния',
-  communication_handoff: 'коммуникация и передача',
+  communication_handoff: 'коммуникация и эскалация',
   action: 'действие',
   vllm_cpu: 'vLLM CPU',
   openai: 'OpenAI API',
@@ -164,6 +180,29 @@ const visibleLabels = {
   header_token: 'токен в заголовке',
   bearer_token: 'bearer token',
   none: 'без авторизации',
+  phrase: 'фраза',
+  word: 'слово',
+  contains: 'вхождение',
+  positive: 'позитивное',
+  negative: 'негативное',
+  accepted_by_rules: 'принято правилами',
+  llm_required: 'нужна LLM-классификация',
+  human_review_required: 'нужна проверка оператором',
+  human_required: 'эскалировать оператору',
+};
+
+const activeResolverSourceTypes = ['react_call', 'disabled'];
+const activeEndpointAdapterTypes = ['mock', 'n8n_webhook'];
+const activeLaunchExecutionModes = ['auto', 'operator_approval', 'blocked'];
+const operationContractTypes = ['string', 'integer', 'number', 'boolean', 'array', 'object'];
+const operationArrayItemTypes = ['string', 'integer', 'number', 'boolean', 'object'];
+const operationContractTypeLabels = {
+  string: 'строка',
+  integer: 'целое число',
+  number: 'число',
+  boolean: 'да/нет',
+  array: 'массив',
+  object: 'объект',
 };
 
 const handoffConditionChoices = [
@@ -180,7 +219,7 @@ const handoffConditionChoices = [
   {
     value: 'confidence_below_050',
     label: 'Confidence ниже порога',
-    help: 'Передача включается, когда уверенность решения ниже 0.50.',
+    help: 'Эскалация оператору включается, когда уверенность решения ниже 0.50.',
   },
   {
     value: 'affected_users_threshold',
@@ -219,12 +258,12 @@ const handoffPackageChoices = [
   {
     value: 'sla_remaining',
     label: 'Остаток SLA',
-    help: 'Сколько времени осталось до нарушения SLA на момент передачи.',
+    help: 'Сколько времени осталось до нарушения SLA на момент эскалации оператору.',
   },
   {
     value: 'user_notification',
-    label: 'Текст уведомления пользователя',
-    help: 'Сообщение, которое увидит пользователь или оператор канала.',
+    label: 'Текст уведомления клиента',
+    help: 'Сообщение, которое увидит клиент или оператор канала.',
     required: true,
   },
 ];
@@ -257,8 +296,8 @@ const reactActionGroupChoices = [
   },
   {
     value: 'communication_handoff',
-    label: 'Коммуникация и передача',
-    help: 'Уточняющие вопросы, уведомления и передача в канал взаимодействия.',
+    label: 'Коммуникация и эскалация',
+    help: 'Уточняющие вопросы клиенту, уведомления и эскалация оператору через канал взаимодействия.',
   },
 ];
 
@@ -275,13 +314,13 @@ const reactStopConditionChoices = [
   },
   {
     value: 'clarification_required',
-    label: 'Нужно уточнение',
-    help: 'Оркестратор останавливает цикл и задает следующий вопрос через выбранный канал.',
+    label: 'Нужно уточнение у клиента',
+    help: 'Оркестратор задает клиенту следующий вопрос через выбранный канал и продолжает сценарий после ответа.',
   },
   {
     value: 'handoff_required',
-    label: 'Требуется передача',
-    help: 'Дальнейшее действие определяется блоком 5 и каналом взаимодействия.',
+    label: 'Требуется эскалация оператору',
+    help: 'AI прекращает самостоятельную обработку, а дальнейшее действие определяется блоком 5 и каналом взаимодействия.',
   },
   {
     value: 'iteration_limit',
@@ -291,7 +330,7 @@ const reactStopConditionChoices = [
   {
     value: 'consecutive_tool_errors',
     label: 'Ошибки ReAct-вызовов подряд',
-    help: 'Срабатывает при достижении поля "Ошибок ReAct-вызовов подряд до передачи".',
+    help: 'Срабатывает при достижении поля "Ошибок ReAct-вызовов подряд до эскалации оператору".',
   },
 ];
 
@@ -390,16 +429,24 @@ function setNotice(message, type = 'info') {
 
 function setBusy(isBusy) {
   elements.refreshButton.disabled = isBusy;
-  elements.apiStatus.textContent = isBusy ? 'Загрузка' : `Инициатор: ${state.actorId}`;
+  if (isBusy) {
+    elements.apiStatus.textContent = 'Загрузка';
+  }
 }
 
 function section(title, body, actions = '') {
+  const currentViewTitle = viewTitles[state.activeView] || state.activeView;
+  const isDuplicateTitle = String(title || '').trim() === String(currentViewTitle || '').trim();
+  const actionsHtml = actions ? `<div class="section-actions">${actions}</div>` : '';
+  const headerHtml = isDuplicateTitle
+    ? (actionsHtml ? `<div class="section-head actions-only">${actionsHtml}</div>` : '')
+    : `<div class="section-head">
+        <h2 class="section-title">${escapeHtml(title)}</h2>
+        ${actionsHtml || '<div></div>'}
+      </div>`;
   return `
     <section class="section">
-      <div class="section-head">
-        <h2 class="section-title">${escapeHtml(title)}</h2>
-        <div>${actions}</div>
-      </div>
+      ${headerHtml}
       ${body}
     </section>
   `;
@@ -414,7 +461,7 @@ async function loadView(view = state.activeView) {
   setBusy(true);
   try {
     await renderView(view);
-    elements.apiStatus.textContent = `Готово / инициатор: ${state.actorId}`;
+    elements.apiStatus.textContent = 'Готово';
   } catch (error) {
     elements.viewContent.innerHTML = '<div class="empty">Раздел не загружен</div>';
     setNotice(error.message || String(error), 'error');
@@ -429,8 +476,12 @@ async function renderView(view) {
     await renderDashboard();
   } else if (view === 'scenarios') {
     await renderScenarios();
+  } else if (view === 'orchestrationGraph') {
+    await renderOrchestrationGraph();
   } else if (view === 'scenarioSlots') {
     await renderScenarioSlots();
+  } else if (view === 'slotAutofill') {
+    await renderSlotAutofillProfiles();
   } else if (view === 'scenarioClassification') {
     await renderScenarioClassification();
   } else if (view === 'scenarioReact') {
@@ -478,6 +529,7 @@ async function renderScenarios() {
     promptPacks: context.promptPacks,
     escalationPolicies: context.escalationPolicies,
     interactionChannels: context.interactionChannels,
+    confidenceDefaults: context.confidenceDefaults,
   });
   elements.viewContent.innerHTML = [
     section(
@@ -492,6 +544,356 @@ async function renderScenarios() {
     ),
   ].join('');
   attachScenarioSelect();
+}
+
+async function renderOrchestrationGraph() {
+  const overview = await api('/admin/scenarios');
+  const scenarios = overview.scenarios || [];
+  if (!scenarios.some((scenario) => scenario.scenario_id === state.orchestrationGraphScenarioId)) {
+    state.orchestrationGraphScenarioId = state.scenarioId || scenarios[0]?.scenario_id || '';
+  }
+  const params = new URLSearchParams({
+    view: state.orchestrationGraphView,
+  });
+  if (state.orchestrationGraphView === 'scenario' && state.orchestrationGraphScenarioId) {
+    params.set('scenario_id', state.orchestrationGraphScenarioId);
+  }
+  const graph = await api(`/admin/orchestration-graph?${params.toString()}`);
+  state.lastData.orchestrationGraph = graph;
+  const selectedNode = selectedGraphNode(graph);
+  if (selectedNode) {
+    state.orchestrationGraphSelectedNodeId = selectedNode.id;
+  }
+  elements.viewContent.innerHTML = [
+    section(
+      'Граф оркестрации',
+      `${orchestrationGraphToolbar(scenarios)}
+      ${renderGraphWarnings(graph)}
+      <div class="graph-workspace">
+        <div class="graph-board panel">
+          ${renderGraphControls()}
+          <div class="graph-canvas" data-graph-canvas>
+            ${renderGraphSvg(graph)}
+          </div>
+        </div>
+        ${renderGraphNodeDetails(graph, selectedNode)}
+      </div>`,
+    ),
+  ].join('');
+  attachOrchestrationGraphInteractions();
+  updateGraphViewport();
+}
+
+function orchestrationGraphToolbar(scenarios) {
+  const scenarioOptions = (scenarios || [])
+    .map(
+      (scenario) => `<option value="${escapeHtml(scenario.scenario_id)}" ${
+        scenario.scenario_id === state.orchestrationGraphScenarioId ? 'selected' : ''
+      }>${escapeHtml(scenario.display_name || scenario.scenario_id)}</option>`,
+    )
+    .join('');
+  return `
+    <div class="toolbar compact graph-toolbar">
+      <label>Режим
+        <select data-graph-view-select>
+          <option value="scenario" ${state.orchestrationGraphView === 'scenario' ? 'selected' : ''}>Граф сценария</option>
+          <option value="base" ${state.orchestrationGraphView === 'base' ? 'selected' : ''}>Базовый граф</option>
+        </select>
+      </label>
+      <label>Сценарий
+        <select data-graph-scenario-select ${state.orchestrationGraphView === 'base' ? 'disabled' : ''}>${scenarioOptions}</select>
+      </label>
+      <button type="button" data-action="orchestration-graph-load">Обновить</button>
+    </div>
+  `;
+}
+
+function renderGraphWarnings(graph) {
+  const warnings = graph.warnings || [];
+  if (!warnings.length) {
+    return '';
+  }
+  return `
+    <div class="empty">
+      <strong>Предупреждения конфигурации</strong>
+      <ul class="usage-list">${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>
+    </div>
+  `;
+}
+
+function renderGraphControls() {
+  return `
+    <div class="graph-controls" aria-label="Масштаб графа">
+      <button type="button" data-action="graph-zoom-out" title="Уменьшить">-</button>
+      <button type="button" data-action="graph-zoom-in" title="Увеличить">+</button>
+      <button type="button" data-action="graph-zoom-reset">100%</button>
+      <button type="button" data-action="graph-zoom-fit">Вписать</button>
+      <span class="meta" data-graph-zoom-label>${Math.round(state.orchestrationGraphZoom * 100)}%</span>
+    </div>
+  `;
+}
+
+function selectedGraphNode(graph) {
+  const nodes = graph.nodes || [];
+  return nodes.find((node) => node.id === state.orchestrationGraphSelectedNodeId)
+    || nodes.find((node) => node.id === 'slot_filling')
+    || nodes[0]
+    || null;
+}
+
+function graphNodeById(graph) {
+  return Object.fromEntries((graph.nodes || []).map((node) => [node.id, node]));
+}
+
+function graphTextLines(text, maxChars = 21, maxLines = 3) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length > maxChars && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+    if (lines.length === maxLines - 1) {
+      break;
+    }
+  }
+  if (current) {
+    const usedWords = lines.join(' ').split(/\s+/).filter(Boolean).length + current.split(/\s+/).filter(Boolean).length;
+    const suffix = usedWords < words.length ? '...' : '';
+    lines.push(`${current}${suffix}`);
+  }
+  return lines.slice(0, maxLines);
+}
+
+function graphNodeStatusClass(status) {
+  return String(status || 'unknown').replace(/[^a-zа-яё0-9_-]/gi, '_').toLowerCase();
+}
+
+function renderGraphSvg(graph) {
+  const layout = graph.layout || {};
+  const width = layout.width || 1760;
+  const height = layout.height || 520;
+  const nodeWidth = layout.node_width || 180;
+  const nodeHeight = layout.node_height || 82;
+  const nodesById = graphNodeById(graph);
+  return `
+    <svg class="orchestration-svg" data-graph-svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(graph.title || 'Граф оркестрации')}">
+      <defs>
+        <marker id="graph-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L0,6 L9,3 z"></path>
+        </marker>
+      </defs>
+      <g data-graph-stage>
+        ${(graph.edges || []).map((edge) => renderGraphEdge(edge, nodesById, nodeWidth, nodeHeight)).join('')}
+        ${(graph.nodes || []).map((node) => renderGraphNode(node, nodeWidth, nodeHeight)).join('')}
+      </g>
+    </svg>
+  `;
+}
+
+function renderGraphEdge(edge, nodesById, nodeWidth, nodeHeight) {
+  const source = nodesById[edge.from];
+  const target = nodesById[edge.to];
+  if (!source || !target) {
+    return '';
+  }
+  const sourceLayout = source.layout || {};
+  const targetLayout = target.layout || {};
+  const sx = Number(sourceLayout.x || 0) + nodeWidth;
+  const sy = Number(sourceLayout.y || 0) + nodeHeight / 2;
+  const tx = Number(targetLayout.x || 0);
+  const ty = Number(targetLayout.y || 0) + nodeHeight / 2;
+  const delta = Math.max(70, Math.abs(tx - sx) / 2);
+  const path = `M ${sx} ${sy} C ${sx + delta} ${sy}, ${tx - delta} ${ty}, ${tx} ${ty}`;
+  const labelX = (sx + tx) / 2;
+  const labelY = (sy + ty) / 2 - 8;
+  const className = `graph-edge ${escapeHtml(edge.type || 'flow')}`;
+  const label = [edge.label, edge.condition].filter(Boolean).join(' / ');
+  return `
+    <g class="${className}">
+      <path d="${path}" marker-end="url(#graph-arrow)"></path>
+      ${label ? `<text x="${labelX}" y="${labelY}">${escapeHtml(label)}</text>` : ''}
+    </g>
+  `;
+}
+
+function renderGraphNode(node, nodeWidth, nodeHeight) {
+  const layout = node.layout || {};
+  const selected = node.id === state.orchestrationGraphSelectedNodeId;
+  const titleLines = graphTextLines(node.title, 22, 2);
+  const statusLabel = visibleLabels[graphNodeStatusClass(node.status)] || node.status || 'н/д';
+  return `
+    <g class="graph-node ${escapeHtml(graphNodeStatusClass(node.status))} ${selected ? 'selected' : ''}" data-action="graph-node-select" data-node-id="${escapeHtml(node.id)}" transform="translate(${Number(layout.x || 0)} ${Number(layout.y || 0)})" role="button" tabindex="0">
+      <title>${escapeHtml(node.title)}</title>
+      <rect width="${nodeWidth}" height="${nodeHeight}" rx="8"></rect>
+      <text class="graph-node-step" x="12" y="20">${escapeHtml(node.step_number === null || node.step_number === undefined ? node.type : `${node.step_number}`)}</text>
+      <circle class="graph-node-status" cx="${nodeWidth - 15}" cy="15" r="5"></circle>
+      <text class="graph-node-title" x="12" y="42">
+        ${titleLines.map((line, index) => `<tspan x="12" dy="${index ? 17 : 0}">${escapeHtml(line)}</tspan>`).join('')}
+      </text>
+      <text class="graph-node-meta" x="12" y="${nodeHeight - 10}">${escapeHtml(statusLabel)}</text>
+    </g>
+  `;
+}
+
+function renderGraphNodeDetails(graph, node) {
+  if (!node) {
+    return '<aside class="graph-details panel"><div class="empty">Узел не выбран</div></aside>';
+  }
+  const refs = node.config_refs || [];
+  const metrics = node.metrics || [];
+  return `
+    <aside class="graph-details panel">
+      <div>
+        <div class="metric-label">Выбранный узел</div>
+        <h3>${escapeHtml(node.title)}</h3>
+        <div>${badge(node.status)} ${badge(node.readonly ? 'read_only' : 'active')}</div>
+      </div>
+      <div class="meta">${escapeHtml(node.description || 'Описание не задано.')}</div>
+      ${metrics.length ? `
+        <div class="grid two graph-metrics">
+          ${metrics.map((item) => metric(item.label, escapeHtml(item.value))).join('')}
+        </div>
+      ` : ''}
+      <div>
+        <div class="metric-label">Связанные настройки</div>
+        ${refs.length ? `
+          <ul class="usage-list graph-ref-list">
+            ${refs.map((ref) => `
+              <li>
+                <strong>${escapeHtml(ref.title)}</strong>
+                <span>${escapeHtml(ref.display_name || ref.id || 'н/д')}</span>
+                <button type="button" data-action="graph-config-link" data-graph-view="${escapeHtml(ref.view || '')}" data-graph-domain="${escapeHtml(ref.domain || '')}" data-graph-ref-id="${escapeHtml(ref.id || '')}">Открыть</button>
+              </li>
+            `).join('')}
+          </ul>
+        ` : '<div class="empty">Для узла нет отдельных настроек.</div>'}
+      </div>
+    </aside>
+  `;
+}
+
+function updateGraphViewport() {
+  const stage = document.querySelector('[data-graph-stage]');
+  if (!stage) {
+    return;
+  }
+  stage.setAttribute(
+    'transform',
+    `translate(${state.orchestrationGraphPanX} ${state.orchestrationGraphPanY}) scale(${state.orchestrationGraphZoom})`,
+  );
+  const label = document.querySelector('[data-graph-zoom-label]');
+  if (label) {
+    label.textContent = `${Math.round(state.orchestrationGraphZoom * 100)}%`;
+  }
+}
+
+function setGraphZoom(nextZoom) {
+  state.orchestrationGraphZoom = Math.min(2.4, Math.max(0.35, nextZoom));
+  updateGraphViewport();
+}
+
+function fitGraphToCanvas() {
+  const graph = state.lastData.orchestrationGraph || {};
+  const canvas = document.querySelector('[data-graph-canvas]');
+  const layout = graph.layout || {};
+  if (!canvas || !layout.width || !layout.height) {
+    setGraphZoom(0.78);
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const zoom = Math.min(
+    (rect.width - 28) / layout.width,
+    (rect.height - 28) / layout.height,
+  );
+  state.orchestrationGraphZoom = Math.min(1, Math.max(0.35, zoom));
+  state.orchestrationGraphPanX = Math.max(12, (rect.width - layout.width * state.orchestrationGraphZoom) / 2);
+  state.orchestrationGraphPanY = Math.max(12, (rect.height - layout.height * state.orchestrationGraphZoom) / 2);
+  updateGraphViewport();
+}
+
+function applyGraphConfigRefSelection(domain, refId) {
+  if (!domain || !refId) {
+    return;
+  }
+  if (domain === 'service_scenarios') {
+    state.scenarioId = state.orchestrationGraphScenarioId;
+  } else if (domain === 'slot_schemas') {
+    state.slotSchemaId = refId;
+    state.slotSchemaOperation = 'modify';
+  } else if (domain === 'classification_routes') {
+    state.routeId = refId;
+    state.routeOperation = 'modify';
+  } else if (domain === 'orchestrator_policy') {
+    state.policyId = refId;
+    state.policyOperation = 'modify';
+  } else if (domain === 'tool_launch_matrix') {
+    state.toolMatrixId = refId;
+    state.toolMatrixOperation = 'modify';
+  } else if (domain === 'prompt_packs') {
+    state.promptPackId = refId;
+    state.promptPackOperation = 'modify';
+  } else if (domain === 'escalation_policies') {
+    state.escalationPolicyId = refId;
+    state.escalationOperation = 'modify';
+  } else if (domain === 'interaction_channels') {
+    state.interactionChannelId = refId;
+    state.interactionChannelOperation = 'modify';
+  } else if (domain === 'attribute_resolution_profiles') {
+    state.resolutionProfileId = refId;
+    state.resolutionOperation = 'modify';
+  } else if (domain === 'tools') {
+    state.toolCatalogName = refId;
+    state.operationBindingToolName = refId;
+    state.toolCatalogOperation = 'modify';
+  } else if (domain === 'integration_endpoints') {
+    state.integrationEndpointId = refId;
+    state.integrationEndpointOperation = 'modify';
+  }
+}
+
+function attachOrchestrationGraphInteractions() {
+  const canvas = document.querySelector('[data-graph-canvas]');
+  if (!canvas) {
+    return;
+  }
+  let drag = null;
+  canvas.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('[data-action="graph-node-select"]')) {
+      return;
+    }
+    drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      panX: state.orchestrationGraphPanX,
+      panY: state.orchestrationGraphPanY,
+    };
+    canvas.setPointerCapture(event.pointerId);
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+    state.orchestrationGraphPanX = drag.panX + event.clientX - drag.startX;
+    state.orchestrationGraphPanY = drag.panY + event.clientY - drag.startY;
+    updateGraphViewport();
+  });
+  canvas.addEventListener('pointerup', () => {
+    drag = null;
+  });
+  canvas.addEventListener('pointercancel', () => {
+    drag = null;
+  });
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    const factor = event.deltaY < 0 ? 1.08 : 0.92;
+    setGraphZoom(state.orchestrationGraphZoom * factor);
+  }, { passive: false });
 }
 
 async function loadScenarioContext() {
@@ -534,6 +936,7 @@ async function loadScenarioContext() {
     slotSchemas: slotSchemasConfig.payload?.slot_schemas || [],
     routes: routesConfig.payload?.routes || [],
     policies: policiesConfig.payload?.policies || [],
+    confidenceDefaults: policiesConfig.payload?.confidence_defaults || {},
     toolMatrices: toolMatricesConfig.payload?.matrices || [],
     promptPacks: promptPacksConfig.payload?.packs || [],
     escalationPolicies: escalationPoliciesConfig.payload?.policies || [],
@@ -605,15 +1008,18 @@ function usagePanel(scenarios, referenceKey, referenceId) {
 }
 
 async function renderScenarioSlots() {
-  const [active, scenariosConfig, resolutionProfilesConfig] = await Promise.all([
+  const [active, scenariosConfig, resolutionProfilesConfig, policiesConfig] = await Promise.all([
     api('/admin/config/active/slot_schemas'),
     api('/admin/config/active/service_scenarios'),
     api('/admin/config/active/attribute_resolution_profiles'),
+    api('/admin/config/active/orchestrator_policy'),
   ]);
   const slotSchemas = active.payload?.slot_schemas || [];
   const scenarios = scenariosConfig.payload?.scenarios || [];
   const resolutionProfiles = resolutionProfilesConfig.payload?.profiles || [];
+  const confidenceDefaults = policiesConfig.payload?.confidence_defaults || {};
   state.lastData.resolutionProfiles = resolutionProfiles;
+  state.lastData.confidenceDefaults = confidenceDefaults;
   if (!slotSchemas.some((slotSchema) => slotSchema.slot_schema_id === state.slotSchemaId)) {
     state.slotSchemaId = slotSchemas[0]?.slot_schema_id || '';
   }
@@ -636,11 +1042,352 @@ async function renderScenarioSlots() {
         slotSchemas,
         scenarios,
         resolutionProfiles,
+        confidenceDefaults,
       })}`,
     ),
   ].join('');
   attachCatalogSelect('slotSchemaSelect', 'slotSchemaId', renderScenarioSlots);
   syncAllSlotCardFillMethods();
+}
+
+async function renderSlotAutofillProfiles() {
+  const [active, slotSchemasConfig, scenariosConfig, toolsConfig] = await Promise.all([
+    api('/admin/config/active/slot_autofill_profiles'),
+    api('/admin/config/active/slot_schemas'),
+    api('/admin/config/active/service_scenarios'),
+    api('/admin/config/active/tools'),
+  ]);
+  const profiles = active.payload?.profiles || [];
+  const slotSchemas = slotSchemasConfig.payload?.slot_schemas || [];
+  const scenarios = scenariosConfig.payload?.scenarios || [];
+  const tools = (toolsConfig.payload?.tools || []).filter((tool) => tool.action_type === 'read_only');
+  state.lastData.slotAutofillProfiles = profiles;
+  state.lastData.slotSchemas = slotSchemas;
+  state.lastData.serviceScenarios = scenarios;
+  state.lastData.toolCatalog = toolsConfig.payload?.tools || [];
+  if (!profiles.some((profile) => profile.profile_id === state.slotAutofillProfileId)) {
+    state.slotAutofillProfileId = profiles[0]?.profile_id || '';
+  }
+  const selected = profiles.find((profile) => profile.profile_id === state.slotAutofillProfileId) || null;
+  elements.viewContent.innerHTML = [
+    section(
+      '0.1 Автозаполнение слотов',
+      `${slotAutofillHowToPanel()}
+      ${blockCatalogControls({
+        selectId: 'slotAutofillProfileSelect',
+        label: 'Профиль автозаполнения',
+        items: profiles,
+        idKey: 'profile_id',
+        selectedId: state.slotAutofillProfileId,
+        labelKey: 'display_name',
+        actionPrefix: 'slot-autofill',
+        operation: state.slotAutofillOperation,
+      })}
+      ${renderSlotAutofillEditor({ profile: selected, profiles, slotSchemas, scenarios, tools })}`,
+    ),
+  ].join('');
+  attachCatalogSelect('slotAutofillProfileSelect', 'slotAutofillProfileId', renderSlotAutofillProfiles);
+  syncAllSlotAutofillOutputRows();
+  syncAllSlotAutofillSourceRows();
+}
+
+function slotAutofillHowToPanel() {
+  return `
+    <div class="slot-schema-derived">
+      <div class="metric-label">Зачем нужен профиль</div>
+      <div class="meta">
+        Профиль запускает один read-only ReAct-вызов и детерминированно раскладывает поля результата в слоты выбранной схемы.
+        Если нужного слота еще нет, выберите действие "создать новый слот": UI добавит слот в схему перед сохранением профиля.
+      </div>
+    </div>
+  `;
+}
+
+function slotAutofillCreateTemplate(source, profiles, slotSchemas, tools) {
+  const template = source || profiles[0] || {};
+  const schemaId = template.slot_schema_id || state.slotSchemaId || slotSchemas[0]?.slot_schema_id || '';
+  const tool = findToolInCatalog(tools, template.react_call) || tools[0] || null;
+  return {
+    profile_id: nextConfigItemId(template.profile_id || 'autofill.custom.profile', profiles, 'profile_id'),
+    display_name: '',
+    status: 'draft',
+    description: '',
+    slot_schema_id: schemaId,
+    react_call: tool?.tool_name || '',
+    run_order: (profiles || []).length + 1,
+    accept_policy: 'single_result',
+    input_mapping: {},
+    output_mapping: [],
+    on_no_result: 'continue',
+    on_ambiguous_result: 'ask_client',
+  };
+}
+
+function renderSlotAutofillEditor({ profile, profiles, slotSchemas, scenarios, tools }) {
+  if (state.slotAutofillOperation === 'delete') {
+    if (!profile) {
+      return '<div class="empty">Нет выбранного профиля для удаления</div>';
+    }
+    return `
+      <form class="scenario-editor panel" data-form="slot-autofill-delete">
+        <div>
+          <div class="metric-label">Удаляемый профиль автозаполнения</div>
+          <div class="scenario-title">${escapeHtml(profile.display_name || profile.profile_id)}</div>
+        </div>
+        ${slotAutofillUsagePanel(profile, slotSchemas, scenarios)}
+        <button class="danger" type="submit">Удалить профиль автозаполнения</button>
+      </form>
+    `;
+  }
+  const current = state.slotAutofillOperation === 'create'
+    ? slotAutofillCreateTemplate(profile, profiles, slotSchemas, tools)
+    : profile;
+  if (!current) {
+    return '<div class="empty">Профиль автозаполнения не выбран</div>';
+  }
+  const slotSchema = (slotSchemas || []).find((schema) => schema.slot_schema_id === current.slot_schema_id)
+    || slotSchemas[0]
+    || { slots: [] };
+  const tool = findToolInCatalog(tools, current.react_call) || tools[0] || null;
+  return `
+    <form class="scenario-editor panel" data-form="slot-autofill-editor">
+      <input type="hidden" name="profile_id" value="${escapeHtml(current.profile_id || '')}">
+      <div class="grid two">
+        <label>Название
+          <input name="display_name" value="${escapeHtml(current.display_name || '')}" autocomplete="off" placeholder="Поиск пользователя в AD">
+        </label>
+        <label>Статус
+          <select name="status">${optionList(['draft', 'active', 'disabled'], current.status || 'draft')}</select>
+        </label>
+        <label>Схема слотов
+          <select name="slot_schema_id" data-slot-autofill-schema>${referenceOptions(slotSchemas, 'slot_schema_id', slotSchema.slot_schema_id, 'display_name')}</select>
+          <span class="field-help">Слоты для маппинга и создаваемые слоты относятся только к выбранной схеме.</span>
+        </label>
+        <label>ReAct-вызов чтения
+          <select name="react_call" data-slot-autofill-react-call>${slotAutofillToolOptions(tools, current.react_call)}</select>
+          <span class="field-help">Для автозаполнения доступны только read-only вызовы. Привязка к endpoint берется из меню "Вызовы и интеграции".</span>
+        </label>
+        <label>Порядок запуска
+          <input name="run_order" type="number" min="1" max="100" value="${escapeHtml(current.run_order || 1)}">
+        </label>
+        <label>Когда принимать результат
+          <select name="accept_policy">${optionList(['single_result', 'always'], current.accept_policy || 'single_result', slotAutofillPolicyLabels())}</select>
+        </label>
+        <label>Если нет результата
+          <select name="on_no_result">${optionList(['continue', 'ask_client', 'operator_handoff'], current.on_no_result || 'continue', slotAutofillFailureLabels())}</select>
+        </label>
+        <label>Если несколько результатов
+          <select name="on_ambiguous_result">${optionList(['continue', 'ask_client', 'operator_handoff'], current.on_ambiguous_result || 'ask_client', slotAutofillFailureLabels())}</select>
+        </label>
+      </div>
+      <label>Описание
+        <textarea name="description" rows="3">${escapeHtml(current.description || '')}</textarea>
+      </label>
+      <fieldset class="launch-editor">
+        <legend>Входные параметры ReAct-вызова</legend>
+        <div class="meta">Параметры берутся из контракта ReAct-вызова. Источником может быть слот схемы, поле обращения, контекст, константа или секрет.</div>
+        <div class="parameter-binding-list" data-slot-autofill-input-list>
+          ${renderSlotAutofillInputRows(current, tool, slotSchema)}
+        </div>
+      </fieldset>
+      <fieldset class="launch-editor">
+        <legend>Поля результата и слоты</legend>
+        <div class="meta">Для каждого поля результата выберите: не использовать, заполнить существующий слот или создать новый слот из этого поля.</div>
+        <datalist id="slotAutofillResultFields">${slotAutofillResultFieldDatalist(tool)}</datalist>
+        <div class="parameter-binding-list" data-slot-autofill-output-list>
+          ${renderSlotAutofillOutputRows(current, tool, slotSchema)}
+        </div>
+        <button type="button" data-action="slot-autofill-output-add">Добавить поле результата</button>
+      </fieldset>
+      ${slotAutofillUsagePanel(current, slotSchemas, scenarios)}
+      <div class="scenario-editor-actions">
+        <button class="primary" type="submit">${state.slotAutofillOperation === 'create' ? 'Создать профиль' : 'Сохранить профиль'}</button>
+      </div>
+    </form>
+  `;
+}
+
+function slotAutofillPolicyLabels() {
+  return {
+    single_result: 'если результат единственный',
+    always: 'всегда брать значения',
+  };
+}
+
+function slotAutofillFailureLabels() {
+  return {
+    continue: 'продолжить сценарий',
+    ask_client: 'задать вопрос клиенту',
+    operator_handoff: 'эскалировать оператору',
+  };
+}
+
+function slotAutofillToolOptions(tools, selectedToolName) {
+  return selectOptions(
+    (tools || []).map((tool) => ({
+      value: tool.tool_name,
+      label: tool.description ? `${tool.tool_name} — ${tool.description}` : tool.tool_name,
+    })),
+    selectedToolName,
+    'нет read-only ReAct-вызовов',
+  );
+}
+
+function slotAutofillUsagePanel(profile, slotSchemas, scenarios) {
+  const schema = (slotSchemas || []).find((item) => item.slot_schema_id === profile?.slot_schema_id);
+  const scenarioNames = (scenarios || [])
+    .filter((scenario) => scenario.slot_schema_id === profile?.slot_schema_id)
+    .map((scenario) => scenario.display_name || scenario.scenario_id);
+  const targets = (profile?.output_mapping || []).map((item) => item.target_slot);
+  return `
+    <div class="slot-schema-derived">
+      <div class="metric-label">Где используется</div>
+      <div class="meta">
+        Схема слотов: ${escapeHtml(schema?.display_name || profile?.slot_schema_id || 'не выбрана')}.
+        Сценарии: ${escapeHtml(scenarioNames.join(', ') || 'нет')}.
+        Целевые слоты: ${escapeHtml(formatList(targets))}.
+      </div>
+    </div>
+  `;
+}
+
+function renderSlotAutofillInputRows(profile, tool, slotSchema) {
+  const parameters = reactParameterNames(tool || {});
+  if (!parameters.length) {
+    return '<div class="empty">У выбранного ReAct-вызова нет входных параметров.</div>';
+  }
+  const required = new Set(schemaRequired(tool?.parameters_schema || {}));
+  return `
+    <div class="parameter-binding-header">
+      <span>Параметр вызова</span>
+      <span>Заполняется из</span>
+    </div>
+    ${parameters.map((parameter) => renderSlotAutofillInputRow(
+      parameter,
+      profile.input_mapping?.[parameter] || defaultSlotAutofillInputSource(parameter, slotSchema),
+      required.has(parameter),
+      slotSchema,
+    )).join('')}
+  `;
+}
+
+function renderSlotAutofillInputRow(parameter, sourceRef, required, slotSchema) {
+  const parsed = parseAutofillSourceRef(sourceRef);
+  return `
+    <div class="parameter-binding-row" data-slot-autofill-input-row>
+      <label>${escapeHtml(parameter)}
+        <span class="field-help">${required ? 'обязательный параметр' : 'необязательный параметр'}</span>
+      </label>
+      <label>Источник
+        <select data-slot-autofill-param-source-mode>${slotAutofillSourceModeOptions(slotSchema, parsed.mode)}</select>
+        <input data-slot-autofill-param-source-custom value="${escapeHtml(parsed.custom)}" autocomplete="off" placeholder="значение или путь">
+      </label>
+      <input type="hidden" data-slot-autofill-param-name value="${escapeHtml(parameter)}">
+    </div>
+  `;
+}
+
+function parseAutofillSourceRef(sourceRef) {
+  const source = String(sourceRef || '');
+  if (source.startsWith('slot:')) return { mode: source, custom: '' };
+  for (const prefix of ['case:', 'context:', 'constant:', 'secret:']) {
+    if (source.startsWith(prefix)) {
+      return { mode: prefix, custom: source.slice(prefix.length) };
+    }
+  }
+  return { mode: '', custom: '' };
+}
+
+function slotAutofillSourceModeOptions(slotSchema, selected) {
+  const slotOptions = (slotSchema?.slots || []).map((slot) => ({
+    value: `slot:${slot.slot_id}`,
+    label: `Слот: ${slot.display_name || slot.slot_id} (${slot.slot_id})`,
+  }));
+  return selectOptions(
+    [
+      { value: '__none__', label: 'не задано' },
+      ...slotOptions,
+      { value: 'case:', label: 'Поле обращения' },
+      { value: 'context:', label: 'Контекст выполнения' },
+      { value: 'constant:', label: 'Константа' },
+      { value: 'secret:', label: 'Секрет' },
+    ],
+    selected || '__none__',
+    'не задано',
+  );
+}
+
+function defaultSlotAutofillInputSource(parameter, slotSchema) {
+  const slotIds = new Set((slotSchema?.slots || []).map((slot) => slot.slot_id));
+  if (slotIds.has(parameter)) return `slot:${parameter}`;
+  if (parameter === 'login' && slotIds.has('user_login')) return 'slot:user_login';
+  if (parameter === 'query' && slotIds.has('symptom')) return 'slot:symptom';
+  return '';
+}
+
+function slotAutofillResultFieldDatalist(tool) {
+  return resultFieldsFromTool(tool)
+    .map((field) => `<option value="${escapeHtml(field.field_id)}">${escapeHtml(field.display_name || field.field_id)}</option>`)
+    .join('');
+}
+
+function renderSlotAutofillOutputRows(profile, tool, slotSchema) {
+  const mappings = profile.output_mapping?.length
+    ? profile.output_mapping
+    : resultFieldsFromTool(tool).map((field) => ({ result_field: field.field_id, target_slot: '', required_for_success: false }));
+  return mappings.map((mapping) => renderSlotAutofillOutputRow(mapping, slotSchema)).join('');
+}
+
+function renderSlotAutofillOutputRow(mapping = {}, slotSchema = { slots: [] }) {
+  const targetExists = (slotSchema.slots || []).some((slot) => slot.slot_id === mapping.target_slot);
+  const action = mapping.target_slot ? (targetExists ? 'existing' : 'new') : 'ignore';
+  const existingOptions = selectOptions(
+    (slotSchema.slots || []).map((slot) => ({
+      value: slot.slot_id,
+      label: `${slot.display_name || slot.slot_id} (${slot.slot_id})`,
+    })),
+    targetExists ? mapping.target_slot : '',
+    'нет слотов',
+  );
+  return `
+    <div class="parameter-binding-row slot-autofill-output-row" data-slot-autofill-output-row>
+      <div class="grid two">
+        <label>Поле результата
+          <input data-slot-autofill-result-field list="slotAutofillResultFields" value="${escapeHtml(mapping.result_field || '')}" autocomplete="off" placeholder="users.0.login">
+          <span class="field-help">Можно выбрать поле из контракта или указать путь, например users.0.login.</span>
+        </label>
+        <label>Действие
+          <select data-slot-autofill-output-action>
+            <option value="ignore" ${action === 'ignore' ? 'selected' : ''}>не использовать</option>
+            <option value="existing" ${action === 'existing' ? 'selected' : ''}>заполнить существующий слот</option>
+            <option value="new" ${action === 'new' ? 'selected' : ''}>создать новый слот</option>
+          </select>
+        </label>
+        <label data-slot-autofill-existing-slot>Существующий слот
+          <select data-slot-autofill-target-slot>${existingOptions}</select>
+        </label>
+        <label data-slot-autofill-new-slot-id>Ключ нового слота
+          <input data-slot-autofill-new-slot-key value="${escapeHtml(targetExists ? '' : mapping.target_slot || '')}" autocomplete="off" placeholder="manager_email">
+        </label>
+        <label data-slot-autofill-new-slot-name>Название нового слота
+          <input data-slot-autofill-new-slot-display value="${escapeHtml(humanizeTechnicalKey(mapping.target_slot || mapping.result_field || ''))}" autocomplete="off" placeholder="Email руководителя">
+        </label>
+        <label data-slot-autofill-new-slot-priority>Priority group
+          <select data-slot-autofill-new-slot-priority-value>${slotPriorityOptions('context')}</select>
+        </label>
+        <label class="boolean-flag" data-slot-autofill-new-slot-required>
+          <span>Слот обязательный в схеме</span>
+          <input data-slot-autofill-new-slot-required-value type="checkbox" value="true" ${mapping.required_for_success === true ? 'checked' : ''}>
+        </label>
+        <label class="boolean-flag">
+          <span>Поле результата обязательно для профиля</span>
+          <input data-slot-autofill-required type="checkbox" value="true" ${mapping.required_for_success === true ? 'checked' : ''}>
+          <span class="field-help">Даже если поле не обязательно в общем контракте ReAct-вызова, этот профиль будет считаться неуспешным, если значение не вернулось.</span>
+        </label>
+      </div>
+      <button class="danger" type="button" data-action="slot-autofill-output-remove">Удалить</button>
+    </div>
+  `;
 }
 
 async function renderScenarioClassification() {
@@ -928,18 +1675,23 @@ function renderInteractionChannelEditor({ channel, channels, scenarios }) {
         <label>Аудит обязателен<select name="audit_required">${booleanOptions(current.audit_required)}</select></label>
       </div>
       <fieldset class="launch-editor">
-        <legend>Ожидание ответа</legend>
+        <legend>Уточнения у клиента</legend>
+        <div class="meta">Этот блок не является эскалацией: AI задает клиенту вопрос, ждет ответ и после ответа продолжает тот же сценарий.</div>
         <div class="grid two">
           <label>Первое напоминание, сек<input name="first_reminder_after_seconds" type="number" min="0" max="604800" value="${escapeHtml(current.waiting_policy?.first_reminder_after_seconds ?? 0)}"></label>
           <label>Таймаут обсуждения, сек<input name="discussion_timeout_seconds" type="number" min="0" max="604800" value="${escapeHtml(current.waiting_policy?.discussion_timeout_seconds ?? 0)}"></label>
           <label>Порог SLA для офлайн-канала, %<input name="sla_elapsed_percent_threshold" type="number" min="0" max="100" value="${escapeHtml(current.waiting_policy?.sla_elapsed_percent_threshold ?? 0)}"></label>
-          <label>Если ответа нет<select name="on_no_answer">${optionList(['save_context', 'create_draft', 'create_work_order', 'call_specialist', 'debug_stop'], current.waiting_policy?.on_no_answer || 'debug_stop')}</select></label>
+          <label>Если клиент не ответил<select name="on_no_answer">${activeOptionList(channelNoAnswerActions(current.mode), current.waiting_policy?.on_no_answer || 'debug_stop')}</select></label>
         </div>
+        ${renderChannelActionFields('question_delivery', 'Как задать вопрос клиенту', current.question_delivery, current.mode)}
+        ${renderChannelActionFields('incomplete_discussion_action', 'Что делать с незавершенным уточнением', current.incomplete_discussion_action, current.mode)}
       </fieldset>
-      ${renderChannelActionFields('question_delivery', 'Доставка вопроса', current.question_delivery)}
-      ${renderChannelActionFields('incomplete_discussion_action', 'Незавершенное обсуждение', current.incomplete_discussion_action)}
-      ${renderChannelActionFields('escalation_action', 'Действие эскалации', current.escalation_action)}
-      ${renderChannelActionProfiles(current.action_profiles || [])}
+      <fieldset class="launch-editor">
+        <legend>Эскалация оператору</legend>
+        <div class="meta">Этот блок используется, когда AI останавливает самостоятельную обработку и передает оператору пакет контекста.</div>
+        ${renderChannelActionFields('escalation_action', 'Базовое действие эскалации оператору', current.escalation_action, current.mode)}
+        ${renderChannelActionProfiles(current.action_profiles || [], current.mode)}
+      </fieldset>
       ${channelUsagePanel(scenarios, current.channel_id)}
       <div class="scenario-editor-actions">
         <button class="primary" type="submit">${state.interactionChannelOperation === 'create' ? 'Создать канал' : 'Сохранить канал'}</button>
@@ -948,18 +1700,18 @@ function renderInteractionChannelEditor({ channel, channels, scenarios }) {
   `;
 }
 
-function renderChannelActionProfiles(profiles) {
+function renderChannelActionProfiles(profiles, mode = 'debug') {
   return `
-    <fieldset class="launch-editor">
-      <legend>Профили действий канала</legend>
+    <div class="nested-editor">
+      <div class="metric-label">Профили эскалации и таймаутов</div>
       <div class="meta">Профиль связывает логическое событие из блока "5. Решение и эскалация" с реальным действием канала.</div>
-      <div id="channelProfileCards">${(profiles || []).map((profile) => renderChannelProfileCard(profile)).join('')}</div>
+      <div id="channelProfileCards">${(profiles || []).map((profile) => renderChannelProfileCard(profile, mode)).join('')}</div>
       <button type="button" data-action="channel-profile-add">Добавить профиль</button>
-    </fieldset>
+    </div>
   `;
 }
 
-function renderChannelProfileCard(profile = {}) {
+function renderChannelProfileCard(profile = {}, mode = 'debug') {
   const action = profile.action || {};
   return `
     <fieldset class="launch-editor" data-channel-profile-card>
@@ -968,10 +1720,7 @@ function renderChannelProfileCard(profile = {}) {
       <label>Название<input name="display_name" value="${escapeHtml(profile.display_name || '')}" autocomplete="off"></label>
       <div class="grid two">
         <label>Тип события<select name="event_type">${optionList(['standard_handoff', 'no_answer', 'major_incident', 'policy_blocked', 'debug_stop'], profile.event_type || 'standard_handoff')}</select></label>
-        <label>Действие<select name="action_type">${optionList(channelActionTypes(), action.action_type || 'debug_stop')}</select></label>
-        <label>ReAct-вызов ИИ<input name="tool_name" value="${escapeHtml(action.tool_name || '')}" autocomplete="off" placeholder="необязательно"></label>
-        <label>Подключение<input name="endpoint_id" value="${escapeHtml(action.endpoint_id || '')}" autocomplete="off" placeholder="mock / n8n / direct_http"></label>
-        <label>Операция<input name="operation_id" value="${escapeHtml(action.operation_id || '')}" autocomplete="off" placeholder="operation_id"></label>
+        <label>Действие канала<select name="action_type">${channelActionTypeOptions(mode, action.action_type || 'debug_stop')}</select></label>
       </div>
       <label>Шаблон сообщения<textarea name="message_template" rows="3">${escapeHtml(action.message_template || '')}</textarea></label>
       <button class="danger" type="button" data-action="channel-profile-remove">Удалить профиль</button>
@@ -979,45 +1728,68 @@ function renderChannelProfileCard(profile = {}) {
   `;
 }
 
-function renderChannelActionFields(prefix, title, action = {}) {
+function renderChannelActionFields(prefix, title, action = {}, mode = 'debug') {
   return `
     <fieldset class="launch-editor">
       <legend>${escapeHtml(title)}</legend>
       <div class="grid two">
-        <label>Действие<select name="${escapeHtml(prefix)}_action_type">${optionList(channelActionTypes(), action.action_type || 'debug_stop')}</select></label>
-        <label>ReAct-вызов ИИ<input name="${escapeHtml(prefix)}_tool_name" value="${escapeHtml(action.tool_name || '')}" autocomplete="off" placeholder="необязательно"></label>
-        <label>Подключение<input name="${escapeHtml(prefix)}_endpoint_id" value="${escapeHtml(action.endpoint_id || '')}" autocomplete="off" placeholder="mock / n8n / direct_http"></label>
-        <label>Операция<input name="${escapeHtml(prefix)}_operation_id" value="${escapeHtml(action.operation_id || '')}" autocomplete="off" placeholder="operation_id"></label>
+        <label>Действие канала<select name="${escapeHtml(prefix)}_action_type">${channelActionTypeOptions(mode, action.action_type || 'debug_stop')}</select></label>
       </div>
       <label>Шаблон сообщения<textarea name="${escapeHtml(prefix)}_message_template" rows="3">${escapeHtml(action.message_template || '')}</textarea></label>
     </fieldset>
   `;
 }
 
-function channelActionTypes() {
-  return ['ask_end_user', 'ask_operator', 'show_debug_message', 'save_context', 'create_draft', 'create_work_order', 'call_specialist', 'notify_on_call', 'debug_stop'];
+function channelActionTypes(mode = '') {
+  if (mode === 'online_interactive') {
+    return ['ask_end_user', 'create_draft', 'call_specialist', 'notify_on_call'];
+  }
+  if (mode === 'offline_interactive') {
+    return ['ask_operator', 'save_context', 'create_work_order'];
+  }
+  if (mode === 'debug') {
+    return ['show_debug_message', 'debug_stop'];
+  }
+  return ['show_debug_message', 'debug_stop'];
+}
+
+function channelNoAnswerActions(mode = '') {
+  if (mode === 'online_interactive') {
+    return ['create_draft', 'call_specialist'];
+  }
+  if (mode === 'offline_interactive') {
+    return ['save_context', 'create_work_order'];
+  }
+  if (mode === 'debug') {
+    return ['debug_stop'];
+  }
+  return ['debug_stop'];
+}
+
+function channelActionTypeOptions(mode, selected) {
+  return activeOptionList(channelActionTypes(mode), selected);
 }
 
 function defaultChannelActionProfiles(channelId) {
   if (channelId === 'messenger_bot') {
     return [
-      { profile_id: 'standard_handoff', display_name: 'Передача специалисту в чат', event_type: 'standard_handoff', action: { action_type: 'call_specialist', message_template: 'Позвать специалиста в диалог с полным контекстом сценария.' } },
-      { profile_id: 'no_answer', display_name: 'Нет ответа: создать черновик', event_type: 'no_answer', action: { action_type: 'create_draft', message_template: 'Создать черновик заявки и сохранить контекст диалога.' } },
+      { profile_id: 'standard_handoff', display_name: 'Эскалация: подключить оператора к чату', event_type: 'standard_handoff', action: { action_type: 'call_specialist', message_template: 'Позвать специалиста в диалог с полным контекстом сценария.' } },
+      { profile_id: 'no_answer', display_name: 'Клиент не ответил: создать черновик', event_type: 'no_answer', action: { action_type: 'create_draft', message_template: 'Создать черновик заявки и сохранить контекст диалога.' } },
       { profile_id: 'major_incident', display_name: 'Major Incident: оповестить дежурных', event_type: 'major_incident', action: { action_type: 'notify_on_call', message_template: 'Оповестить дежурную команду и приложить пакет Major Incident.' } },
       { profile_id: 'policy_blocked', display_name: 'Политика заблокировала автоисполнение', event_type: 'policy_blocked', action: { action_type: 'call_specialist', message_template: 'Позвать специалиста для ручной проверки.' } },
     ];
   }
   if (channelId === 'service_desk') {
     return [
-      { profile_id: 'standard_handoff', display_name: 'Передача: создать наряд', event_type: 'standard_handoff', action: { action_type: 'create_work_order', message_template: 'Создать наряд ответственному специалисту с пакетом эскалации.' } },
-      { profile_id: 'no_answer', display_name: 'Нет ответа: создать наряд', event_type: 'no_answer', action: { action_type: 'create_work_order', message_template: 'Создать наряд по незавершенному обсуждению и приложить контекст.' } },
+      { profile_id: 'standard_handoff', display_name: 'Эскалация: создать наряд', event_type: 'standard_handoff', action: { action_type: 'create_work_order', message_template: 'Создать наряд ответственному специалисту с пакетом эскалации.' } },
+      { profile_id: 'no_answer', display_name: 'Клиент не ответил: создать наряд', event_type: 'no_answer', action: { action_type: 'create_work_order', message_template: 'Создать наряд по незавершенному уточнению и приложить контекст.' } },
       { profile_id: 'major_incident', display_name: 'Major Incident: создать наряд дежурной группе', event_type: 'major_incident', action: { action_type: 'create_work_order', message_template: 'Создать срочный наряд дежурной группе с пакетом Major Incident.' } },
       { profile_id: 'policy_blocked', display_name: 'Политика заблокировала автоисполнение', event_type: 'policy_blocked', action: { action_type: 'create_work_order', message_template: 'Создать наряд для ручной проверки.' } },
     ];
   }
   return [
-    { profile_id: 'standard_handoff', display_name: 'Отладка: остановить передачу', event_type: 'standard_handoff', action: { action_type: 'debug_stop', message_template: 'Остановить сценарий и показать причину эскалации оператору.' } },
-    { profile_id: 'no_answer', display_name: 'Отладка: нет ответа', event_type: 'no_answer', action: { action_type: 'debug_stop', message_template: 'Остановить dry-run из-за отсутствия ответа.' } },
+    { profile_id: 'standard_handoff', display_name: 'Отладка: эскалация оператору', event_type: 'standard_handoff', action: { action_type: 'debug_stop', message_template: 'Остановить сценарий и показать причину эскалации оператору.' } },
+    { profile_id: 'no_answer', display_name: 'Отладка: клиент не ответил', event_type: 'no_answer', action: { action_type: 'debug_stop', message_template: 'Остановить dry-run из-за отсутствия ответа клиента.' } },
     { profile_id: 'major_incident', display_name: 'Отладка: Major Incident', event_type: 'major_incident', action: { action_type: 'debug_stop', message_template: 'Остановить сценарий и показать оператору причину Major Incident.' } },
     { profile_id: 'policy_blocked', display_name: 'Отладка: policy blocked', event_type: 'policy_blocked', action: { action_type: 'debug_stop', message_template: 'Остановить сценарий и показать блокировку policy.' } },
   ];
@@ -1049,6 +1821,7 @@ function renderScenarioEditor({
   promptPacks,
   escalationPolicies,
   interactionChannels = [],
+  confidenceDefaults = {},
 }) {
   if (state.scenarioOperation === 'delete') {
     if (!detail?.scenario) {
@@ -1105,8 +1878,13 @@ function renderScenarioEditor({
       </div>
       <details class="launch-editor">
         <summary>Переопределение порогов уверенности</summary>
-        <div class="meta">Заполняйте только если сценарий должен отличаться от системных порогов. Пустые поля наследуются от уровня системы.</div>
-        ${renderConfidenceThresholdInputs('scenario_confidence', scenario.confidence_overrides || {})}
+        ${renderConfidenceOverrideControls({
+          prefix: 'scenario_confidence',
+          overrides: scenario.confidence_overrides || {},
+          baseThresholds: confidenceDefaults || detail?.system_confidence_defaults || {},
+          enabledText: 'Сценарий использует собственные пороги вместо системных.',
+          disabledText: 'Переопределение выключено. Сейчас используются системные настройки.',
+        })}
       </details>
       <div class="scenario-editor-actions">
         <button class="primary" type="submit">${state.scenarioOperation === 'create' ? 'Создать сценарий' : 'Сохранить изменения'}</button>
@@ -1128,6 +1906,11 @@ async function renderResolutionProfiles() {
   const scenarios = scenariosConfig.payload?.scenarios || [];
   const tools = toolsConfig.payload?.tools || [];
   const endpoints = endpointsConfig.payload?.endpoints || [];
+  state.lastData.resolutionProfiles = profiles;
+  state.lastData.slotSchemas = slotSchemas;
+  state.lastData.serviceScenarios = scenarios;
+  state.lastData.toolCatalog = tools;
+  state.lastData.integrationEndpoints = endpoints;
   if (!profiles.some((profile) => profile.profile_id === state.resolutionProfileId)) {
     state.resolutionProfileId = profiles[0]?.profile_id || '';
   }
@@ -1163,6 +1946,8 @@ async function renderResolutionProfiles() {
       ${editor}`,
     ),
   ].join('');
+  syncResolutionTargetSlotCustom(elements.viewContent);
+  syncAllResolutionOutputSlotCustom(elements.viewContent);
   document.getElementById('resolutionProfileSelect')?.addEventListener('change', (event) => {
     state.resolutionProfileId = event.target.value;
     renderResolutionProfiles().catch((error) => setNotice(error.message || String(error), 'error'));
@@ -1175,8 +1960,9 @@ function resolutionProfileHowToPanel() {
       <div class="metric-label">Как подключить профиль к сценарию</div>
       <div class="meta">
         Здесь профиль только создается или модифицируется. Чтобы он начал заполнять слот, откройте
-        "Сценарии обработки -> 0. Слоты", раскройте нужный слот, выберите "Способ заполнения = профиль разрешения"
-        и затем выберите этот профиль в поле "Профиль разрешения атрибута".
+        "Сценарии обработки -> 0. Слоты", раскройте нужный слот, выберите "Как получить значение слота = профиль разрешения"
+        и затем выберите этот профиль в поле "Профиль разрешения атрибута". Если слота еще нет, можно создать профиль по ключу будущего
+        слота или сохранить слот без выбранного профиля: будет создан черновик профиля.
       </div>
     </div>
   `;
@@ -1208,6 +1994,123 @@ function resolutionProfileUsagePanel(slotSchemas, scenarios, profileId) {
   `;
 }
 
+function buildResolutionSlotContext(profile, slotSchemas, scenarios) {
+  const schemaById = slotSchemaById(slotSchemas);
+  const usedSchemaIds = new Set((slotSchemas || [])
+    .filter((schema) => (schema.slots || []).some((slot) => slot.resolution_profile_id === profile?.profile_id))
+    .map((schema) => schema.slot_schema_id));
+  const usedScenarios = (scenarios || []).filter((scenario) => usedSchemaIds.has(scenario.slot_schema_id));
+  const profileId = profile?.profile_id || '';
+  if (state.resolutionSlotProfileId !== profileId) {
+    state.resolutionSlotProfileId = profileId;
+    state.resolutionSlotScenarioId = usedScenarios[0]?.scenario_id || state.scenarioId || (scenarios || [])[0]?.scenario_id || '';
+  }
+  const selectedScenario = (scenarios || []).find((scenario) => scenario.scenario_id === state.resolutionSlotScenarioId)
+    || usedScenarios[0]
+    || (scenarios || []).find((scenario) => scenario.scenario_id === state.scenarioId)
+    || (scenarios || [])[0]
+    || null;
+  if (selectedScenario && state.resolutionSlotScenarioId !== selectedScenario.scenario_id) {
+    state.resolutionSlotScenarioId = selectedScenario.scenario_id;
+  }
+  const schema = selectedScenario ? schemaById[selectedScenario.slot_schema_id] : null;
+  const slots = (schema?.slots || []).map((slot) => ({
+    ...slot,
+    scenario_ids: selectedScenario ? [selectedScenario.scenario_id] : [],
+    scenario_names: selectedScenario ? [selectedScenario.display_name || selectedScenario.scenario_id] : [],
+    missing_scenario_names: [],
+  }));
+  return {
+    selectedScenario,
+    schema,
+    slots,
+    scenarioCount: selectedScenario ? 1 : 0,
+    scenarioNames: selectedScenario ? [selectedScenario.display_name || selectedScenario.scenario_id] : [],
+    usedScenarios,
+  };
+}
+
+function resolutionScenarioOptions(scenarios, selectedScenarioId) {
+  if (!(scenarios || []).length) {
+    return '<option value="">Нет сценариев</option>';
+  }
+  return (scenarios || [])
+    .map((scenario) => `<option value="${escapeHtml(scenario.scenario_id)}" ${
+      scenario.scenario_id === selectedScenarioId ? 'selected' : ''
+    }>${escapeHtml(scenario.display_name || scenario.scenario_id)}</option>`)
+    .join('');
+}
+
+function resolutionSlotMultiOptions(slotContext, selectedValues) {
+  const selected = new Set(selectedValues || []);
+  const known = new Set((slotContext.slots || []).map((slot) => slot.slot_id));
+  const missingSelected = [...selected].filter((slotId) => slotId && !known.has(slotId));
+  const options = [
+    ...(slotContext.slots || []).map((slot) => ({
+      value: slot.slot_id,
+      label: slotOptionLabel(slot, slotContext),
+    })),
+    ...missingSelected.map((slotId) => ({
+      value: slotId,
+      label: `Слот не найден в выбранном сценарии: ${slotId}`,
+    })),
+  ];
+  if (!options.length) {
+    return '<option value="">Нет доступных слотов</option>';
+  }
+  return options
+    .map(
+      (option) => `<option value="${escapeHtml(option.value)}" ${selected.has(option.value) ? 'selected' : ''}>${escapeHtml(option.label)}</option>`,
+    )
+    .join('');
+}
+
+function resolutionSlotContextPanel(slotContext) {
+  const scenarioName = slotContext.selectedScenario
+    ? slotContext.selectedScenario.display_name || slotContext.selectedScenario.scenario_id
+    : 'сценарий не выбран';
+  const schemaName = slotContext.schema?.display_name || slotContext.schema?.slot_schema_id || 'схема слотов не найдена';
+  const usedNames = (slotContext.usedScenarios || []).map((scenario) => scenario.display_name || scenario.scenario_id);
+  const usedText = usedNames.length
+    ? `Профиль уже используется в сценариях: ${usedNames.join(', ')}.`
+    : 'Профиль пока не используется сценариями; список слотов ниже нужен для корректного выбора при настройке.';
+  return `
+    <div class="slot-schema-derived">
+      <div class="metric-label">Контекст слотов профиля</div>
+      <div class="meta">${escapeHtml(`Сейчас выбран сценарий "${scenarioName}", схема "${schemaName}". ${usedText}`)}</div>
+    </div>
+  `;
+}
+
+function resolutionTargetSlotField(slotContext, selectedSlotId) {
+  const slots = slotContext.slots || [];
+  const selectedExists = slots.some((slot) => slot.slot_id === selectedSlotId);
+  const customSelected = !selectedSlotId && !slots.length;
+  const options = [
+    ...(slots.length ? [`<option value="" ${!selectedSlotId ? 'selected' : ''}>выберите слот</option>`] : []),
+    ...slots.map((slot) => `<option value="${escapeHtml(slot.slot_id)}" ${
+      slot.slot_id === selectedSlotId ? 'selected' : ''
+    }>${escapeHtml(slotOptionLabel(slot, slotContext))}</option>`),
+  ];
+  if (selectedSlotId && !selectedExists) {
+    options.unshift(
+      `<option value="${escapeHtml(selectedSlotId)}" selected>${escapeHtml(`Слот пока не найден в выбранной схеме: ${selectedSlotId}`)}</option>`,
+    );
+  }
+  options.push(`<option value="__custom__" ${customSelected ? 'selected' : ''}>Новый слот: указать ключ ниже</option>`);
+  return `
+    <label>Целевой слот
+      <select name="target_slot_id" data-resolution-target-slot>${options.join('')}</select>
+      <span class="field-help">Основной слот, ради которого выполняется профиль. Если слота еще нет, выберите создание нового и укажите его будущий ключ.</span>
+    </label>
+    <label data-resolution-target-slot-custom ${customSelected ? '' : 'hidden'}>
+      Ключ нового слота
+      <input name="target_slot_id_custom" value="" autocomplete="off" placeholder="user_login">
+      <span class="field-help">Используется только для первого создания профиля до добавления слота в схему. После создания слота выберите его из списка.</span>
+    </label>
+  `;
+}
+
 function renderResolutionProfileEditor({ profile, profiles, slotSchemas = [], scenarios = [], tools = [], endpoints = [] }) {
   if (state.resolutionOperation === 'delete') {
     if (!profile) {
@@ -1231,47 +2134,38 @@ function renderResolutionProfileEditor({ profile, profiles, slotSchemas = [], sc
   if (!current) {
     return '<div class="empty">Нет выбранного профиля для редактирования</div>';
   }
+  const slotContext = buildResolutionSlotContext(current, slotSchemas, scenarios);
   const statusOptions = ['active', 'draft', 'planned', 'disabled']
     .map((status) => `<option value="${status}" ${current.status === status ? 'selected' : ''}>${escapeHtml(visibleLabels[status] || status)}</option>`)
     .join('');
-  const sourceType = current.candidate_source?.source_type || 'react_call';
-  const sourceTypeOptions = ['react_call', 'ticket_history', 'case_data', 'disabled']
-    .map((value) => `<option value="${value}" ${sourceType === value ? 'selected' : ''}>${escapeHtml(resolutionSourceTypeLabels[value] || value)}</option>`)
-    .join('');
-  const handoffAction = current.handoff_policy?.action || 'operator_handoff';
+  const humanPolicy = current.human_resolution_policy || {};
+  const handoffAction = humanPolicy.handoff_action || 'operator_handoff';
   const handoffOptions = ['operator_handoff', 'escalate', 'debug_stop', 'leave_empty']
     .map((value) => `<option value="${value}" ${handoffAction === value ? 'selected' : ''}>${escapeHtml(visibleLabels[value] || value)}</option>`)
     .join('');
-  const fallbackAction = current.fallback?.action || 'ask_user';
+  const fallbackAction = humanPolicy.fallback_action || current.fallback?.action || 'ask_user';
   const fallbackOptions = ['ask_user', 'operator_handoff', 'escalate', 'leave_empty']
     .map((value) => `<option value="${value}" ${fallbackAction === value ? 'selected' : ''}>${escapeHtml(visibleLabels[value] || value)}</option>`)
     .join('');
-  const resultPolicy = resolutionResultPolicy(current);
-  const resultType = resultPolicy.result_type || 'list';
-  const resultTypeOptions = [
-    ['list', 'список результатов'],
-    ['object', 'один объект'],
-  ]
-    .map(([value, label]) => `<option value="${value}" ${resultType === value ? 'selected' : ''}>${escapeHtml(label)}</option>`)
-    .join('');
+  const selectedInputSlots = profileInputSlotIds(current);
+  const enrichmentSteps = profileEnrichmentSteps(current, tools, endpoints);
+  const outputRules = profileOutputRules(current);
+  const llmScript = current.llm_resolution_script || {};
   return `
     <form class="scenario-editor panel" data-form="resolution-profile-editor">
       <input type="hidden" name="profile_id" value="${escapeHtml(current.profile_id || '')}">
-      <input type="hidden" name="history_filter_json" value="${escapeHtml(JSON.stringify(current.candidate_source?.history_filter || {}))}">
       <div class="grid two">
         <label>Название<input name="display_name" value="${escapeHtml(current.display_name || '')}" autocomplete="off"></label>
         <label>Статус<select name="status">${statusOptions}</select></label>
       </div>
       <label>Описание<textarea name="description" rows="3">${escapeHtml(current.description || '')}</textarea></label>
+      ${resolutionSlotContextPanel(slotContext)}
       <div class="grid two">
-        <label>Целевой слот
-          <input name="target_slot_id" value="${escapeHtml(current.target_slot_id || '')}" autocomplete="off" placeholder="user_login">
-          <span class="field-help">Основной слот, ради которого выполняется профиль.</span>
+        <label>Сценарий для выбора слотов
+          <select name="resolution_slot_scenario_id" data-resolution-slot-scenario>${resolutionScenarioOptions(scenarios, slotContext.selectedScenario?.scenario_id || '')}</select>
+          <span class="field-help">Список целевых и выходных слотов строится из схемы слотов выбранного сценария.</span>
         </label>
-        <label>Выходные слоты
-          <input name="output_slots" value="${escapeHtml(csv(current.output_slots))}" autocomplete="off" placeholder="user_login, user_id">
-          <span class="field-help">Слоты сценария, которые профиль может заполнить.</span>
-        </label>
+        ${resolutionTargetSlotField(slotContext, current.target_slot_id || '')}
         <label>Лимит попыток
           <input name="max_attempts" type="number" min="1" max="10" value="${escapeHtml(current.max_attempts || 1)}">
           <span class="field-help">Сколько раз можно уточнять признаки и повторять операцию разрешения.</span>
@@ -1280,80 +2174,34 @@ function renderResolutionProfileEditor({ profile, profiles, slotSchemas = [], sc
         <label>Log<select name="log_required">${booleanOptions(current.log_required)}</select></label>
       </div>
       <fieldset class="launch-editor">
-        <legend>Признаки для поиска</legend>
-        <div class="grid two">
-          <label>Извлечь из текста обращения
-            <input name="llm_attributes" value="${escapeHtml(csv(attributeIdsBySource(current, 'llm')))}" autocomplete="off" placeholder="last_name, first_name, email">
-            <span class="field-help">Модель извлекает эти признаки из текста, но не принимает решение о заполнении слота.</span>
-          </label>
-          <label>Взять из слотов сценария
-            <input name="slot_attributes" value="${escapeHtml(csv(attributeIdsBySource(current, 'slot')))}" autocomplete="off" placeholder="user_login, device_id">
-            <span class="field-help">Значения уже должны быть собраны как слоты сценария.</span>
-          </label>
-          <label>Запросить при уточнении
-            <input name="operator_attributes" value="${escapeHtml(csv(attributeIdsBySource(current, 'operator_answer')))}" autocomplete="off" placeholder="department, employee_number">
-            <span class="field-help">Эти признаки можно спросить у пользователя или оператора, если результат пустой или неоднозначный.</span>
-          </label>
-        </div>
-      </fieldset>
-      <fieldset class="launch-editor">
-        <legend>Операция разрешения атрибута</legend>
-        <div class="grid two">
-          <label>Тип выполнения
-            <select name="candidate_source_type">${sourceTypeOptions}</select>
-            <span class="field-help">Обычно это ReAct-вызов чтения: AD, CMDB, история заявок или другой безопасный источник результата.</span>
-          </label>
-          <label>ReAct-вызов и операция
-            <select name="candidate_binding">${candidateBindingOptions(tools, current.candidate_source)}</select>
-            <span class="field-help">Выберите связку ReAct-вызова, подключения и операции. Настройка самой операции находится в "Инструменты и интеграции".</span>
-          </label>
-        </div>
-        ${renderCandidateParameterMapping(current, tools, endpoints)}
-      </fieldset>
-      <fieldset class="launch-editor">
-        <legend>Как оценивать результат операции</legend>
-        <div class="grid two">
-          <label>Тип результата
-            <select name="result_type">${resultTypeOptions}</select>
-            <span class="field-help">Список используется для нескольких результатов, объект - для ответа "найдено/не найдено".</span>
-          </label>
-          <label>Путь списка результатов
-            <input name="result_list_path" value="${escapeHtml(resultPolicy.list_path || '')}" autocomplete="off" placeholder="users">
-            <span class="field-help">Для типа "список": где в ответе операции лежит массив результатов.</span>
-          </label>
-          <label>Путь объекта
-            <input name="result_object_path" value="${escapeHtml(resultPolicy.object_path || '')}" autocomplete="off" placeholder="object">
-            <span class="field-help">Для типа "один объект": где лежит объект результата. Можно оставить пустым, если ответ операции сам является объектом.</span>
-          </label>
-          <label>Признак успешного поиска
-            <input name="result_success_path" value="${escapeHtml(resultPolicy.success_path || '')}" autocomplete="off" placeholder="object_found">
-            <span class="field-help">Для типа "один объект": boolean-поле, которое говорит, что объект найден.</span>
-          </label>
-          <label>Значение целевого слота
-            <input name="result_target_value_path" value="${escapeHtml(resultPolicy.target_value_path || '')}" autocomplete="off" placeholder="login">
-            <span class="field-help">Поле результата, которым будет заполнен целевой слот профиля.</span>
-          </label>
-          <label>Confidence результата
-            <input name="result_confidence_path" value="${escapeHtml(resultPolicy.confidence_path || '')}" autocomplete="off" placeholder="confidence">
-          </label>
-          <label>Отображаемое имя результата
-            <input name="result_display_value_path" value="${escapeHtml(resultPolicy.display_value_path || '')}" autocomplete="off" placeholder="display_name">
-          </label>
-        </div>
-        <label>Дополнительные выходные слоты
-          <textarea name="result_output_mapping" rows="3" placeholder="user_id=user_id">${escapeHtml(formatKeyValueLines(resultPolicy.output_mapping))}</textarea>
-          <span class="field-help">Одна строка на слот: слот=поле результата операции. Например user_id=user_id.</span>
+        <legend>Входные слоты</legend>
+        <label>Слоты, которые подаются в обогащение и LLM-правило
+          <select name="input_slots" multiple size="6">${resolutionSlotMultiOptions(slotContext, selectedInputSlots)}</select>
+          <span class="field-help">Выбираются из схемы слотов сценария. Эти значения можно использовать в параметрах ReAct-вызовов и в LLM-скрипте разрешения.</span>
         </label>
       </fieldset>
-      <fieldset class="launch-editor">
-        <legend>Матрица решений</legend>
-        <div class="grid two">
-          ${renderDecisionSelect('empty_result', 'Если результата нет', resolutionDecisionValue(current.decision_policy, 'empty_result'))}
-          ${renderDecisionSelect('single_result', 'Если результат один', resolutionDecisionValue(current.decision_policy, 'single_result'))}
-          ${renderDecisionSelect('multiple_results', 'Если результатов несколько', resolutionDecisionValue(current.decision_policy, 'multiple_results'))}
-          ${renderDecisionSelect('source_error', 'Если источник недоступен', current.decision_policy?.source_error)}
-          ${renderDecisionSelect('attempt_limit', 'Если попытки исчерпаны', current.decision_policy?.attempt_limit)}
+      <fieldset class="launch-editor enrichment-builder">
+        <legend>Обогащение контекста</legend>
+        <div class="meta">Шаги выполняются сверху вниз. Каждый ReAct-вызов сохраняет результат как именованную сущность, которую можно использовать в следующих шагах и LLM-правиле.</div>
+        <div data-enrichment-step-list>
+          ${renderEnrichmentStepCards(enrichmentSteps, slotContext, outputRules, tools)}
         </div>
+        <button type="button" data-action="enrichment-step-add">Добавить шаг обогащения</button>
+      </fieldset>
+      <fieldset class="launch-editor">
+        <legend>Выходные слоты и порядок заполнения</legend>
+        <div class="meta">Профиль может заполнить только выбранные слоты сценария. Порядок определяет, в какой последовательности LLM-правило должно пытаться сформировать значения.</div>
+        <div class="parameter-binding-list" data-resolution-output-list>
+          ${renderResolutionOutputRows(outputRules, slotContext)}
+        </div>
+        <button type="button" data-action="resolution-output-add">Добавить выходной слот</button>
+      </fieldset>
+      <fieldset class="launch-editor">
+        <legend>LLM-правила выбора, заполнения и уточнения</legend>
+        <label>Скрипт разрешения
+          <textarea name="llm_resolution_script_text" rows="7">${escapeHtml(llmScript.script_text || defaultResolutionScriptText(current))}</textarea>
+          <span class="field-help">Текст объясняет модели, как оценивать ответ операции, в каком порядке заполнять выходные слоты, когда задавать уточняющий вопрос клиенту и когда эскалировать оператору.</span>
+        </label>
       </fieldset>
       <details class="launch-editor">
         <summary>Пороги внутри профиля</summary>
@@ -1369,31 +2217,32 @@ function renderResolutionProfileEditor({ profile, profiles, slotSchemas = [], sc
           <label>Уточнение ниже
             <input name="confidence_clarification" type="number" min="0" max="1" step="0.01" value="${escapeHtml(current.confidence_thresholds?.clarification ?? '')}">
           </label>
-          <label>Передача человеку ниже
+          <label>Эскалация оператору ниже
             <input name="confidence_operator_handoff" type="number" min="0" max="1" step="0.01" value="${escapeHtml(current.confidence_thresholds?.operator_handoff ?? '')}">
           </label>
         </div>
       </details>
       <fieldset class="launch-editor">
-        <legend>Уточнение и передача человеку</legend>
+        <legend>Уточнение у клиента и эскалация оператору</legend>
+        <div class="meta">Уточнение продолжает AI-сценарий после ответа клиента. Эскалация останавливает самостоятельную обработку и передает контекст оператору.</div>
         <div class="grid two">
-          <label>Уточняемые атрибуты
-            <input name="clarification_ask_for_attributes" value="${escapeHtml(csv(current.clarification_policy?.ask_for_attributes))}" autocomplete="off" placeholder="department, employee_number">
-            <span class="field-help">Какие признаки попросить для следующей попытки поиска.</span>
+          <label>Слоты для уточнения у клиента
+            <select name="clarification_slots" multiple size="6">${resolutionSlotMultiOptions(slotContext, humanPolicy.clarification_slots || [])}</select>
+            <span class="field-help">Какие слоты сценария запросить у клиента для следующей попытки разрешения атрибута.</span>
           </label>
-          <label>Пакет передачи человеку
-            <input name="handoff_package" value="${escapeHtml(csv(current.handoff_policy?.package))}" autocomplete="off" placeholder="last_name, users, user_login">
-            <span class="field-help">Какие собранные слоты и промежуточные атрибуты передать сотруднику при ручной обработке.</span>
+          <label>Пакет эскалации оператору
+            <select name="handoff_package" multiple size="6">${resolutionSlotMultiOptions(slotContext, humanPolicy.handoff_package || [])}</select>
+            <span class="field-help">Какие слоты сценария передать оператору, если AI не может продолжить самостоятельно.</span>
           </label>
-          <label>Действие передачи
+          <label>Действие эскалации оператору
             <select name="handoff_action">${handoffOptions}</select>
           </label>
           <label>Резервное действие
             <select name="fallback_action">${fallbackOptions}</select>
           </label>
         </div>
-        <label>Вопрос при неоднозначном или пустом результате
-          <textarea name="clarification_question" rows="2">${escapeHtml(current.clarification_policy?.question || current.fallback?.question || '')}</textarea>
+        <label>Вопрос клиенту при неоднозначном или пустом результате
+          <textarea name="clarification_question" rows="2">${escapeHtml(humanPolicy.clarification_question || current.fallback?.question || '')}</textarea>
         </label>
       </fieldset>
       ${resolutionProfileUsagePanel(slotSchemas, scenarios, current.profile_id)}
@@ -1405,26 +2254,62 @@ function renderResolutionProfileEditor({ profile, profiles, slotSchemas = [], sc
 }
 
 const resolutionSourceTypeLabels = {
-  react_call: 'ReAct-вызов чтения',
+  react_call: 'endpoint-операция чтения',
   ticket_history: 'история заявок',
   case_data: 'данные обращения',
-  disabled: 'отключен',
+  disabled: 'отключено',
 };
 
-const resolutionDecisionLabels = {
-  auto_fill_if_confident: 'заполнить, если уверенность достаточна',
-  ask_clarification: 'задать уточняющий вопрос',
-  ask_disambiguation: 'спросить для выбора результата',
-  operator_handoff: 'передать человеку',
-  escalate: 'эскалировать',
-  leave_empty: 'оставить пустым',
-  debug_stop: 'остановить в отладке',
-};
+const resultFieldTypes = ['string', 'number', 'boolean', 'object', 'array', 'unknown'];
 
-function attributeIdsBySource(profile, source) {
-  return (profile.input_attributes || [])
-    .filter((attribute) => attribute.source === source)
-    .map((attribute) => attribute.source === 'slot' ? attribute.source_ref || attribute.attribute_id : attribute.attribute_id);
+function profileResolverOperation(profile = {}) {
+  return profile.resolver_operation || profile.candidate_source || {
+    source_type: 'disabled',
+    parameter_mapping: {},
+  };
+}
+
+function profileInputSlotIds(profile = {}) {
+  return (profile.input_slots || [])
+    .map((slot) => slot.slot_id)
+    .filter(Boolean);
+}
+
+function profileOutputSlotIds(profile = {}) {
+  return (profile.output_slots_order || profile.output_slots || [])
+    .map((slot) => (typeof slot === 'string' ? slot : slot.slot_id))
+    .filter(Boolean);
+}
+
+function profileOutputRules(profile = {}) {
+  const rules = (profile.output_slots_order || []).map((rule, index) => ({
+    slot_id: rule.slot_id || '',
+    order: rule.order || index + 1,
+    required_for_success: rule.required_for_success ?? rule.slot_id === profile.target_slot_id,
+    source_hint: rule.source_hint || rule.slot_id || '',
+    fallback: rule.fallback || (rule.slot_id === profile.target_slot_id ? 'ask_clarification' : 'leave_empty'),
+  }));
+  if (!rules.length) {
+    for (const slotId of profileOutputSlotIds(profile)) {
+      rules.push({
+        slot_id: slotId,
+        order: rules.length + 1,
+        required_for_success: slotId === profile.target_slot_id,
+        source_hint: slotId,
+        fallback: slotId === profile.target_slot_id ? 'ask_clarification' : 'leave_empty',
+      });
+    }
+  }
+  if (profile.target_slot_id && !rules.some((rule) => rule.slot_id === profile.target_slot_id)) {
+    rules.unshift({
+      slot_id: profile.target_slot_id,
+      order: 1,
+      required_for_success: true,
+      source_hint: profile.target_slot_id,
+      fallback: 'ask_clarification',
+    });
+  }
+  return rules.map((rule, index) => ({ ...rule, order: index + 1 }));
 }
 
 function candidateBindingValue(toolName, binding) {
@@ -1450,63 +2335,52 @@ function candidateBindingOptions(tools, source) {
 }
 
 function selectedCandidateOperation(profile, tools, endpoints) {
-  const source = profile.candidate_source || {};
+  const source = profileResolverOperation(profile);
   const endpoint = (endpoints || []).find((item) => item.endpoint_id === source.endpoint_id);
   const operation = endpoint?.operations?.[source.operation_id] || null;
   const tool = (tools || []).find((item) => item.tool_name === source.tool_name) || null;
   return { tool, endpoint, operation };
 }
 
-function resolutionResultPolicy(profile = {}) {
-  if (profile.result_policy) return profile.result_policy;
-  const mapping = profile.candidate_mapping || {};
-  const looksLikeObject = mapping.candidate_count_path === 'object_found' || mapping.candidates_path === 'object';
-  const policy = {
-    result_type: looksLikeObject ? 'object' : 'list',
-    target_value_path: mapping.value_path || profile.target_slot_id || 'value',
-    confidence_path: mapping.confidence_path || '',
-    display_value_path: mapping.label_path || '',
-    output_mapping: mapping.output_mapping || {},
-  };
-  if (looksLikeObject) {
-    policy.object_path = mapping.candidates_path || 'object';
-    policy.success_path = mapping.candidate_count_path || '';
-  } else {
-    policy.list_path = mapping.candidates_path || 'candidates';
+function profileOperationResultEntity(profile = {}, tools = [], endpoints = []) {
+  if (profile.operation_result_entity) {
+    return profile.operation_result_entity;
   }
-  return policy;
-}
-
-function resolutionDecisionValue(policy = {}, key) {
-  const legacy = {
-    empty_result: 'zero_candidates',
-    single_result: 'single_candidate',
-    multiple_results: 'multiple_candidates',
-  };
-  return policy[key] || policy[legacy[key]] || defaultResolutionDecisionPolicy[key];
-}
-
-function resolutionAttributeOptions(profile, selected) {
-  const attributes = profile.input_attributes || [];
-  const options = [`<option value="" ${!selected ? 'selected' : ''}>не использовать</option>`];
-  for (const attribute of attributes) {
-    const isSlot = attribute.source === 'slot';
-    const value = isSlot
-      ? `slot:${attribute.source_ref || attribute.attribute_id}`
-      : `attribute:${attribute.attribute_id}`;
-    const labelPrefix = isSlot ? 'Слот: ' : 'Признак: ';
-    const label = `${labelPrefix}${attribute.display_name || attribute.source_ref || attribute.attribute_id}`;
-    options.push(`<option value="${escapeHtml(value)}" ${selected === value ? 'selected' : ''}>${escapeHtml(label)}</option>`);
-  }
-  if (selected && !options.some((option) => option.includes(`value="${escapeHtml(selected)}"`))) {
-    options.push(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`);
-  }
-  return options.join('');
-}
-
-function renderCandidateParameterMapping(profile, tools, endpoints) {
   const { operation } = selectedCandidateOperation(profile, tools, endpoints);
-  const mapping = profile.candidate_source?.parameter_mapping || {};
+  const fields = inferResultFieldsFromOperation(operation);
+  return {
+    entity_name: inferResultEntityName(operation),
+    entity_description: operation?.description || 'Результат ReAct-вызова.',
+    available_fields: fields,
+  };
+}
+
+function inferResultEntityName(operation) {
+  const output = operation?.mock_output || {};
+  const listKey = Object.keys(output).find((key) => Array.isArray(output[key]));
+  return listKey || 'result';
+}
+
+function inferResultFieldsFromOperation(operation) {
+  const output = operation?.mock_output || {};
+  const listKey = Object.keys(output).find((key) => Array.isArray(output[key]));
+  const sample = listKey && output[listKey]?.[0] && typeof output[listKey][0] === 'object'
+    ? output[listKey][0]
+    : output;
+  const fields = Object.entries(sample || {})
+    .filter(([, value]) => value === null || ['string', 'number', 'boolean'].includes(typeof value))
+    .map(([fieldId, value]) => ({
+      field_id: fieldId,
+      display_name: fieldId,
+      field_type: value === null ? 'unknown' : typeof value,
+      description: '',
+    }));
+  return fields.length ? fields : [{ field_id: 'value', display_name: 'Значение', field_type: 'unknown', description: '' }];
+}
+
+function renderResolverParameterMapping(profile, slotContext, tools, endpoints) {
+  const { operation } = selectedCandidateOperation(profile, tools, endpoints);
+  const mapping = profileResolverOperation(profile).parameter_mapping || {};
   const names = operation ? operationParameterNames(operation, mapping) : Object.keys(mapping);
   if (!names.length) {
     return '<div class="empty">У выбранной операции нет описанных входных параметров.</div>';
@@ -1515,17 +2389,17 @@ function renderCandidateParameterMapping(profile, tools, endpoints) {
     <div class="parameter-binding-list">
       <div class="parameter-binding-header">
         <span>Входной параметр операции</span>
-        <span>Значение взять из</span>
+        <span>Слот сценария</span>
       </div>
       ${names.map((name) => `
-        <div class="parameter-binding-row" data-candidate-param-row>
-          <input type="hidden" data-candidate-param-name value="${escapeHtml(name)}">
+        <div class="parameter-binding-row" data-resolver-param-row>
+          <input type="hidden" data-resolver-param-name value="${escapeHtml(name)}">
           <div class="parameter-binding-meta">
             <strong>${escapeHtml(name)}</strong>
             <span>${escapeHtml(operation ? schemaMetaLine(name, schemaProperties(operation.request_schema || {})[name], schemaRequired(operation.request_schema || {}).includes(name), ' входной параметр') : 'входной параметр операции')}</span>
           </div>
-          <label>Значение взять из
-            <select data-candidate-param-source>${resolutionAttributeOptions(profile, mapping[name] || defaultResolutionParameterSource(name, profile))}</select>
+          <label>Слот
+            <select data-resolver-param-source>${resolverSlotSourceOptions(slotContext, mapping[name] || defaultResolverParameterSource(name, slotContext))}</select>
           </label>
         </div>
       `).join('')}
@@ -1533,88 +2407,498 @@ function renderCandidateParameterMapping(profile, tools, endpoints) {
   `;
 }
 
-function defaultResolutionParameterSource(parameterName, profile) {
-  const attributes = profile.input_attributes || [];
-  const byId = new Map(attributes.map((attribute) => [attribute.attribute_id, attribute]));
-  const bySourceRef = new Map(attributes
-    .filter((attribute) => attribute.source === 'slot')
-    .map((attribute) => [attribute.source_ref || attribute.attribute_id, attribute]));
-  const directSlot = bySourceRef.get(parameterName);
-  if (directSlot) return `slot:${directSlot.source_ref || directSlot.attribute_id}`;
-  const directAttribute = byId.get(parameterName);
-  if (directAttribute?.source === 'slot') return `slot:${directAttribute.source_ref || directAttribute.attribute_id}`;
-  if (directAttribute) return `attribute:${parameterName}`;
-  if (parameterName === 'login' && bySourceRef.has('user_login')) return 'slot:user_login';
-  if (parameterName === 'login' && byId.get('user_login')?.source === 'slot') return `slot:${byId.get('user_login').source_ref || 'user_login'}`;
-  if (parameterName === 'login' && byId.has('login_candidate')) return 'attribute:login_candidate';
+function resolverSlotSourceOptions(slotContext, selected) {
+  const options = [`<option value="" ${!selected ? 'selected' : ''}>не использовать</option>`];
+  const knownValues = new Set();
+  for (const slot of slotContext.slots || []) {
+    const value = `slot:${slot.slot_id}`;
+    knownValues.add(value);
+    options.push(`<option value="${escapeHtml(value)}" ${selected === value ? 'selected' : ''}>${escapeHtml(slotOptionLabel(slot, slotContext))}</option>`);
+  }
+  if (selected && !knownValues.has(selected)) {
+    options.push(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`);
+  }
+  return options.join('');
+}
+
+function defaultResolverParameterSource(parameterName, slotContext) {
+  const slotIds = new Set((slotContext.slots || []).map((slot) => slot.slot_id));
+  if (slotIds.has(parameterName)) return `slot:${parameterName}`;
+  if (parameterName === 'login' && slotIds.has('user_login')) return 'slot:user_login';
+  if (parameterName === 'object_ref' && slotIds.has('device_id')) return 'slot:device_id';
+  if (parameterName === 'object_ref' && slotIds.has('location')) return 'slot:location';
+  if (parameterName === 'target_ref' && slotIds.has('location')) return 'slot:location';
+  if (parameterName === 'target_ref' && slotIds.has('resource_name')) return 'slot:resource_name';
+  if (parameterName === 'query' && slotIds.has('symptom')) return 'slot:symptom';
   return '';
 }
 
-function renderDecisionSelect(key, label, selected) {
-  const value = selected || defaultResolutionDecisionPolicy[key] || 'ask_clarification';
+function profileEnrichmentSteps(profile = {}, tools = [], endpoints = []) {
+  if (Array.isArray(profile.enrichment_steps)) {
+    return profile.enrichment_steps;
+  }
+  const source = profileResolverOperation(profile);
+  if (source.source_type !== 'react_call' || !source.tool_name) {
+    return [];
+  }
+  const resultEntity = profileOperationResultEntity(profile, tools, endpoints);
+  return [{
+    step_name: `Получить ${resultEntity.entity_name || source.tool_name}`,
+    react_call: source.tool_name,
+    parameter_mapping: source.parameter_mapping || {},
+    result_entity_name: resultEntity.entity_name || 'result',
+    result_entity_description: resultEntity.entity_description || 'Результат ReAct-вызова.',
+    result_fields: resultEntity.available_fields || [],
+    on_error: 'continue_to_llm',
+  }];
+}
+
+function renderEnrichmentStepCards(steps, slotContext, outputRules, tools) {
+  const normalizedSteps = (steps || []).map((step, index) => normalizeEnrichmentStep(step, index, tools));
+  if (!normalizedSteps.length) {
+    state.resolutionEnrichmentEditIndex = 0;
+    return '<div class="empty">Шаги обогащения не настроены. Добавьте шаг обогащения или оставьте профиль как черновик без внешних данных.</div>';
+  }
+  const activeIndex = Math.max(0, Math.min(state.resolutionEnrichmentEditIndex || 0, normalizedSteps.length - 1));
+  state.resolutionEnrichmentEditIndex = activeIndex;
   return `
-    <label>${escapeHtml(label)}
-      <select name="decision_${escapeHtml(key)}">
-        ${Object.entries(resolutionDecisionLabels)
-          .map(([action, actionLabel]) => `<option value="${escapeHtml(action)}" ${action === value ? 'selected' : ''}>${escapeHtml(actionLabel)}</option>`)
-          .join('')}
-      </select>
-    </label>
+    <div class="enrichment-step-table">
+      <div class="enrichment-step-header">
+        <span>N</span>
+        <span>Шаг</span>
+        <span>ReAct-вызов</span>
+        <span>Результат</span>
+        <span>При ошибке</span>
+        <span>Действия</span>
+      </div>
+      ${normalizedSteps.map((step, index) => renderEnrichmentStepCard(
+        step,
+        index,
+        normalizedSteps.slice(0, index),
+        slotContext,
+        outputRules,
+        tools,
+        index === activeIndex,
+      )).join('')}
+    </div>
   `;
 }
 
-const defaultResolutionDecisionPolicy = {
-  empty_result: 'ask_clarification',
-  single_result: 'auto_fill_if_confident',
-  multiple_results: 'ask_disambiguation',
-  source_error: 'operator_handoff',
-  attempt_limit: 'operator_handoff',
-};
+function normalizeEnrichmentStep(step = {}, index = 0, tools = []) {
+  const tool = findToolInCatalog(tools, step.react_call) || (step.react_call ? null : tools[0]) || null;
+  const reactCall = step.react_call || tool?.tool_name || '';
+  return {
+    step_name: step.step_name || '',
+    react_call: reactCall,
+    parameter_mapping: step.parameter_mapping || {},
+    result_entity_name: step.result_entity_name || inferEntityNameFromTool(tool, index),
+    result_entity_description: step.result_entity_description || 'Результат ReAct-вызова.',
+    result_fields: step.result_fields?.length ? step.result_fields : resultFieldsFromTool(tool),
+    on_error: step.on_error || 'continue_to_llm',
+  };
+}
 
-function formatKeyValueLines(value) {
-  return Object.entries(value || {})
-    .map(([key, item]) => `${key}=${item}`)
-    .join('\n');
+function inferEntityNameFromTool(tool, index = 0) {
+  if (!tool?.tool_name) return `entity_${index + 1}`;
+  const name = String(tool.tool_name)
+    .replace(/^search_/, '')
+    .replace(/^find_/, '')
+    .replace(/^get_/, '')
+    .replace(/^query_/, '')
+    .replace(/_by_.+$/, '')
+    .replace(/_from_.+$/, '');
+  return name || `entity_${index + 1}`;
+}
+
+function renderEnrichmentStepCard(step = {}, index = 0, previousSteps = [], slotContext = { slots: [] }, outputRules = [], tools = [], active = false) {
+  const tool = findToolInCatalog(tools, step.react_call) || null;
+  const stepTitle = step.step_name || tool?.description || step.react_call || 'новый ReAct-вызов';
+  const resultFieldsCount = step.result_fields?.length || 0;
+  return `
+    <div class="enrichment-step-card ${active ? 'active' : ''}" data-enrichment-step-card data-enrichment-step-index="${index}">
+      ${active ? '' : `<textarea hidden data-enrichment-step-json>${escapeHtml(JSON.stringify(step))}</textarea>`}
+      <div class="enrichment-step-row">
+        <span class="enrichment-step-number">${index + 1}</span>
+        <span>
+          <strong>${escapeHtml(stepTitle)}</strong>
+          <small>${escapeHtml(resultFieldsCount ? `Контракт результата: ${resultFieldsCount} полей` : 'Контракт результата не описан')}</small>
+        </span>
+        <span>${escapeHtml(tool?.description || step.react_call || 'не выбран')}</span>
+        <span>${escapeHtml(step.result_entity_name || 'не задано')}</span>
+        <span>${escapeHtml(enrichmentOnErrorLabel(step.on_error))}</span>
+        <span class="row-actions">
+          <button type="button" data-action="enrichment-step-edit" data-step-index="${index}" ${active ? 'disabled' : ''}>Изменить</button>
+          <button class="danger" type="button" data-action="enrichment-step-remove">Удалить</button>
+        </span>
+      </div>
+      ${active ? renderEnrichmentStepEditor(step, index, previousSteps, slotContext, outputRules, tools) : ''}
+    </div>
+  `;
+}
+
+function renderEnrichmentStepEditor(step = {}, index = 0, previousSteps = [], slotContext = { slots: [] }, outputRules = [], tools = []) {
+  const tool = findToolInCatalog(tools, step.react_call) || tools[0] || null;
+  const reactCall = step.react_call || tool?.tool_name || '';
+  const resultFieldsEntity = {
+    available_fields: step.result_fields?.length ? step.result_fields : resultFieldsFromTool(tool),
+  };
+  return `
+    <div class="enrichment-step-editor" data-enrichment-step-editor>
+      <div class="grid two enrichment-editor-main">
+        <label>Название шага
+          <input data-enrichment-step-name value="${escapeHtml(step.step_name || '')}" autocomplete="off" placeholder="Поиск получателя">
+        </label>
+        <label>ReAct-вызов
+          <select data-enrichment-react-call>${toolCatalogOptions(tools, reactCall)}</select>
+          <span class="field-help">Привязка к endpoint-операции берется из меню "Вызовы и интеграции".</span>
+        </label>
+        <label>Имя сущности результата
+          <input data-enrichment-result-entity value="${escapeHtml(step.result_entity_name || inferEntityNameFromTool(tool, index))}" autocomplete="off" placeholder="users">
+          <span class="field-help">Под этим именем результат ReAct-вызова доступен следующим шагам и LLM-правилу. Для ссылок используйте формат entity:&lt;сущность&gt;.&lt;поле&gt;, например entity:users.login.</span>
+        </label>
+        <label>Действие при ошибке
+          <select data-enrichment-on-error>${enrichmentOnErrorOptions(step.on_error || 'continue_to_llm')}</select>
+        </label>
+      </div>
+      ${renderEnrichmentParameterRows(step, tool, slotContext, outputRules, previousSteps, index)}
+      <details class="launch-editor enrichment-result-contract">
+        <summary>Контракт результата: ${(resultFieldsEntity.available_fields || []).length} полей</summary>
+        ${renderOperationResultFieldRows(resultFieldsEntity)}
+      </details>
+      <details class="launch-editor">
+        <summary>Дополнительно</summary>
+        <label>Описание сущности результата
+          <textarea data-enrichment-result-description rows="2">${escapeHtml(step.result_entity_description || '')}</textarea>
+        </label>
+      </details>
+    </div>
+  `;
+}
+
+function enrichmentOnErrorOptions(selected) {
+  const labels = {
+    continue_to_llm: 'продолжить к LLM-правилу',
+    stop_and_ask_client: 'остановить и уточнить у клиента',
+    escalate_operator: 'эскалировать оператору',
+  };
+  return ['continue_to_llm', 'stop_and_ask_client', 'escalate_operator']
+    .map((value) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${labels[value]}</option>`)
+    .join('');
+}
+
+function enrichmentOnErrorLabel(value) {
+  const labels = {
+    continue_to_llm: 'продолжить к LLM-правилу',
+    stop_and_ask_client: 'уточнить у клиента',
+    escalate_operator: 'эскалировать оператору',
+  };
+  return labels[value] || value || 'не задано';
+}
+
+function renderEnrichmentParameterRows(step, tool, slotContext, outputRules, previousSteps, stepIndex) {
+  const mapping = step.parameter_mapping || {};
+  const names = tool ? parameterNamesForTool(tool, mapping) : Object.keys(mapping);
+  if (!names.length) {
+    return '<div class="empty">У выбранного ReAct-вызова нет описанных параметров.</div>';
+  }
+  return `
+    <div class="parameter-binding-list enrichment-param-table" data-enrichment-param-list>
+      <div class="parameter-binding-header compact-three">
+        <span>Параметр ReAct-вызова</span>
+        <span>Тип</span>
+        <span>Заполняется из</span>
+      </div>
+      ${names.map((name) => `
+        <div class="parameter-binding-row compact-three" data-enrichment-param-row>
+          <input type="hidden" data-enrichment-param-name value="${escapeHtml(name)}">
+          <div class="parameter-binding-meta">
+            <strong>${escapeHtml(schemaDisplayName(name, parameterSchemaProperties(tool)[name]))}</strong>
+            <span>${escapeHtml(name)}</span>
+          </div>
+          <div class="parameter-binding-meta">
+            ${escapeHtml(tool ? schemaMetaLine(name, parameterSchemaProperties(tool)[name], schemaRequired(tool.parameters_schema || {}).includes(name)) : 'параметр ReAct-вызова')}
+          </div>
+          <label>Источник
+            ${renderEnrichmentSourceControl(
+              mapping[name] || defaultEnrichmentParameterSource(name, slotContext),
+              slotContext,
+              outputRules,
+              previousSteps,
+              mapping,
+              stepIndex,
+            )}
+          </label>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderEnrichmentSourceControl(selected, slotContext, outputRules, previousSteps, mapping, stepIndex) {
+  const options = enrichmentSourceOptionObjects(slotContext, outputRules, previousSteps, mapping);
+  const knownValues = new Set(options.map((option) => option.value));
+  const mode = selected && knownValues.has(selected)
+    ? selected
+    : selected?.startsWith('constant:')
+      ? 'constant:'
+      : selected?.startsWith('secret:')
+        ? 'secret:'
+        : selected
+          ? 'custom:'
+          : '';
+  const customValue = mode === 'constant:' || mode === 'secret:'
+    ? selected.slice(mode.length)
+    : mode === 'custom:'
+      ? selected
+      : '';
+  return `
+    <select data-enrichment-param-source-mode>
+      <option value="" ${!mode ? 'selected' : ''}>не использовать</option>
+      ${options.map((option) => `<option value="${escapeHtml(option.value)}" ${mode === option.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+      <option value="constant:" ${mode === 'constant:' ? 'selected' : ''}>Константа</option>
+      <option value="secret:" ${mode === 'secret:' ? 'selected' : ''}>Секрет</option>
+      ${mode === 'custom:' ? '<option value="custom:" selected>Техническая ссылка</option>' : '<option value="custom:">Техническая ссылка</option>'}
+    </select>
+    <input data-enrichment-param-source-custom value="${escapeHtml(customValue)}" autocomplete="off" placeholder="значение или ссылка" ${customValue || mode === 'constant:' || mode === 'secret:' || mode === 'custom:' ? '' : 'hidden'}>
+    <span class="field-help">${escapeHtml(enrichmentSourceLabel(selected, slotContext, outputRules, previousSteps) || 'Выберите источник значения.')}</span>
+  `;
+}
+
+function enrichmentSourceOptionObjects(slotContext, outputRules, previousSteps, mapping = {}) {
+  const values = new Map();
+  const add = (value, label) => {
+    if (value && !values.has(value)) {
+      values.set(value, label);
+    }
+  };
+  for (const value of Object.values(mapping || {})) {
+    if (value && !value.startsWith('constant:') && !value.startsWith('secret:')) {
+      add(value, enrichmentSourceLabel(value, slotContext, outputRules, previousSteps));
+    }
+  }
+  for (const slot of slotContext.slots || []) {
+    add(`slot:${slot.slot_id}`, `Слот: ${slot.display_name || slot.slot_id}`);
+  }
+  for (const rule of outputRules || []) {
+    if (!rule.slot_id) continue;
+    const slot = (slotContext.slots || []).find((item) => item.slot_id === rule.slot_id);
+    add(`output:${rule.slot_id}`, `Выходной слот: ${slot?.display_name || rule.slot_id}`);
+  }
+  for (const step of previousSteps || []) {
+    const entityName = step.result_entity_name;
+    if (!entityName) continue;
+    add(`entity:${entityName}`, `Сущность ${entityName}`);
+    for (const field of step.result_fields || []) {
+      if (field.field_id) {
+        add(`entity:${entityName}.${field.field_id}`, `Сущность ${entityName}: ${field.display_name || field.field_id}`);
+      }
+    }
+  }
+  return Array.from(values, ([value, label]) => ({ value, label }));
+}
+
+function enrichmentSourceLabel(sourceRef, slotContext, outputRules, previousSteps) {
+  if (!sourceRef) return '';
+  const { source, value } = parseBindingString(sourceRef);
+  if (source === 'slot') {
+    const slot = (slotContext.slots || []).find((item) => item.slot_id === value);
+    return `Слот: ${slot?.display_name || value}`;
+  }
+  if (source === 'output') {
+    const slot = (slotContext.slots || []).find((item) => item.slot_id === value);
+    const known = (outputRules || []).some((rule) => rule.slot_id === value);
+    return `${known ? 'Выходной слот' : 'Выходной слот вне списка'}: ${slot?.display_name || value}`;
+  }
+  if (source === 'entity') {
+    const [entityName, fieldId] = value.split('.', 2);
+    const step = (previousSteps || []).find((item) => item.result_entity_name === entityName);
+    const field = (step?.result_fields || []).find((item) => item.field_id === fieldId);
+    return fieldId ? `Сущность ${entityName}: ${field?.display_name || fieldId}` : `Сущность ${entityName}`;
+  }
+  if (source === 'constant') return `Константа: ${value}`;
+  if (source === 'secret') return `Секрет: ${value}`;
+  return sourceRef;
+}
+
+function defaultEnrichmentParameterSource(parameterName, slotContext) {
+  return defaultResolverParameterSource(parameterName, slotContext);
+}
+
+function renderOperationResultFieldRows(entity) {
+  const fields = entity.available_fields?.length
+    ? entity.available_fields
+    : [{ field_id: '', display_name: '', field_type: 'unknown', description: '' }];
+  return `
+    <div class="parameter-binding-list" data-resolution-result-field-list>
+      <div class="parameter-binding-header">
+        <span>Поле результата</span>
+        <span>Описание</span>
+      </div>
+      ${fields.map((field) => renderOperationResultFieldRow(field)).join('')}
+    </div>
+    <button type="button" data-action="resolution-result-field-add">Добавить поле результата</button>
+  `;
+}
+
+function renderOperationResultFieldRow(field = {}) {
+  const typeOptions = resultFieldTypes
+    .map((type) => `<option value="${type}" ${type === (field.field_type || 'unknown') ? 'selected' : ''}>${escapeHtml(visibleLabels[type] || type)}</option>`)
+    .join('');
+  return `
+    <div class="parameter-binding-row" data-resolution-result-field-row>
+      <div class="grid two">
+        <label>Ключ поля
+          <input data-resolution-result-field-id value="${escapeHtml(field.field_id || '')}" autocomplete="off" placeholder="login">
+        </label>
+        <label>Название
+          <input data-resolution-result-field-name value="${escapeHtml(field.display_name || '')}" autocomplete="off" placeholder="Логин">
+        </label>
+        <label>Тип
+          <select data-resolution-result-field-type>${typeOptions}</select>
+        </label>
+        <label>Описание
+          <input data-resolution-result-field-description value="${escapeHtml(field.description || '')}" autocomplete="off">
+        </label>
+      </div>
+      <button class="danger" type="button" data-action="resolution-result-field-remove">Удалить</button>
+    </div>
+  `;
+}
+
+function resultFieldsFromTool(tool) {
+  const names = reactResultFieldNames(tool || {});
+  const properties = schemaProperties(tool?.result_schema || {});
+  if (!names.length) {
+    return [{ field_id: 'value', display_name: 'Значение', field_type: 'unknown', description: '' }];
+  }
+  return names.map((name) => {
+    const schema = properties[name] || {};
+    return {
+      field_id: name,
+      display_name: schema.title || humanizeTechnicalKey(name),
+      field_type: schema.type === 'integer' ? 'number' : (schema.type || 'unknown'),
+      description: schema.description || '',
+    };
+  });
+}
+
+function renderResolutionOutputRows(rules, slotContext) {
+  const rows = rules.length ? rules : [{ slot_id: '', order: 1, required_for_success: true, source_hint: '', fallback: 'ask_clarification' }];
+  return rows.map((rule) => renderResolutionOutputRow(rule, slotContext)).join('');
+}
+
+function resolutionOutputSlotOptions(slotContext, selectedSlotId) {
+  const slots = slotContext.slots || [];
+  const selectedExists = slots.some((slot) => slot.slot_id === selectedSlotId);
+  const customSelected = !selectedSlotId && !slots.length;
+  const options = [
+    `<option value="" ${!selectedSlotId && slots.length ? 'selected' : ''}>${slots.length ? 'выберите слот' : 'нет существующих слотов'}</option>`,
+    ...slots.map((slot) => `<option value="${escapeHtml(slot.slot_id)}" ${
+      slot.slot_id === selectedSlotId ? 'selected' : ''
+    }>${escapeHtml(slotOptionLabel(slot, slotContext))}</option>`),
+  ];
+  if (selectedSlotId && !selectedExists) {
+    options.unshift(
+      `<option value="${escapeHtml(selectedSlotId)}" selected>${escapeHtml(`Слот пока не найден в выбранной схеме: ${selectedSlotId}`)}</option>`,
+    );
+  }
+  options.push(`<option value="__custom__" ${customSelected ? 'selected' : ''}>Новый слот: указать ключ ниже</option>`);
+  return options.join('');
+}
+
+function renderResolutionOutputRow(rule = {}, slotContext = { slots: [] }) {
+  const customSelected = !rule.slot_id && !(slotContext.slots || []).length;
+  const fallbackOptions = [
+    ['ask_clarification', 'уточнить у клиента'],
+    ['operator_handoff', 'эскалировать оператору'],
+    ['leave_empty', 'оставить пустым'],
+  ]
+    .map(([value, label]) => `<option value="${value}" ${value === (rule.fallback || 'leave_empty') ? 'selected' : ''}>${escapeHtml(label)}</option>`)
+    .join('');
+  return `
+    <div class="parameter-binding-row" data-resolution-output-row>
+      <div class="grid two">
+        <label>Слот
+          <select data-resolution-output-slot>${resolutionOutputSlotOptions(slotContext, rule.slot_id || '')}</select>
+        </label>
+        <label data-resolution-output-slot-custom ${customSelected ? '' : 'hidden'}>Ключ нового выходного слота
+          <input data-resolution-output-slot-custom-value value="" autocomplete="off" placeholder="user_login">
+          <span class="field-help">Используется для первого создания профиля, если выходной слот еще не добавлен в схему слотов.</span>
+        </label>
+        <label>Порядок
+          <input data-resolution-output-order type="number" min="1" max="100" value="${escapeHtml(rule.order || 1)}">
+        </label>
+        <label>Обязателен для успеха
+          <select data-resolution-output-required>${booleanOptions(rule.required_for_success ?? false)}</select>
+        </label>
+        <label>Источник значения
+          <input data-resolution-output-source value="${escapeHtml(rule.source_hint || rule.slot_id || '')}" autocomplete="off" placeholder="users.login">
+          <span class="field-help">Поле или путь в именованной сущности результата, например users.login. Итоговое решение принимает LLM-правило.</span>
+        </label>
+        <label>Если не заполнен
+          <select data-resolution-output-fallback>${fallbackOptions}</select>
+        </label>
+      </div>
+      <button class="danger" type="button" data-action="resolution-output-remove">Удалить</button>
+    </div>
+  `;
+}
+
+function defaultResolutionResponseContract() {
+  return {
+    decision: 'fill | ask_clarification | handoff | leave_empty',
+    filled_slots: { '<slot_id>': 'string|null' },
+    confidence: 'number 0..1',
+    next_question: 'string',
+    reason: 'short russian explanation',
+  };
+}
+
+function defaultResolutionScriptText(profile = {}) {
+  const outputSlots = profileOutputSlotIds(profile).join(', ') || profile.target_slot_id || 'целевой слот';
+  const entityNames = profileEnrichmentSteps(profile)
+    .map((step) => step.result_entity_name)
+    .filter(Boolean)
+    .join(', ') || 'нет результатов ReAct-вызовов';
+  return [
+    'Проанализируй входные слоты и именованные результаты ReAct-вызовов.',
+    `Доступные сущности результата: ${entityNames}.`,
+    `Заполняй только разрешенные выходные слоты: ${outputSlots}.`,
+    'Если результат однозначный, верни решение fill и значения слотов.',
+    'Если данных недостаточно или результатов несколько, задай один уточняющий вопрос.',
+    'Если уверенно решить нельзя после попыток, передай обращение человеку.',
+  ].join(' ');
 }
 
 function resolutionProfileCreateTemplate(source, profiles) {
   const template = source || profiles[0] || {};
+  const targetSlotId = template.target_slot_id || '';
+  const inputSlotIds = profileInputSlotIds(template);
+  const outputRules = profileOutputRules(template);
   return {
     profile_id: nextProfileId(template.profile_id || 'profile.custom.attribute', profiles),
     display_name: '',
     status: 'draft',
     description: '',
-    target_slot_id: template.target_slot_id || '',
-    output_slots: template.output_slots || [],
-    input_attributes: template.input_attributes || [
-      {
-        attribute_id: 'value',
-        display_name: 'Значение',
-        source: 'llm',
-        required: false,
-        extraction_instruction: 'Извлеки значение из текста обращения.',
-      },
-    ],
-    candidate_source: template.candidate_source || {
-      source_type: 'disabled',
-      parameter_mapping: {},
+    target_slot_id: targetSlotId,
+    input_slots: (inputSlotIds.length ? inputSlotIds : [targetSlotId].filter(Boolean)).map((slotId) => ({
+      slot_id: slotId,
+      required_for_operation: true,
+      can_ask_user: true,
+      description: '',
+    })),
+    enrichment_steps: [],
+    output_slots_order: outputRules,
+    llm_resolution_script: {
+      script_text: template.llm_resolution_script?.script_text || defaultResolutionScriptText(template),
+      response_contract: template.llm_resolution_script?.response_contract || defaultResolutionResponseContract(),
     },
-    result_policy: template.result_policy || resolutionResultPolicy(template) || {
-      result_type: 'list',
-      list_path: 'candidates',
-      target_value_path: 'value',
-      confidence_path: 'confidence',
-      display_value_path: 'display_name',
-      output_mapping: {},
-    },
-    decision_policy: template.decision_policy || defaultResolutionDecisionPolicy,
-    clarification_policy: template.clarification_policy || {
-      question: 'Уточните данные для заполнения атрибута.',
-      ask_for_attributes: ['value'],
-    },
-    handoff_policy: template.handoff_policy || {
-      action: 'operator_handoff',
-      package: ['value'],
+    human_resolution_policy: template.human_resolution_policy || {
+      clarification_question: 'Уточните данные для заполнения атрибута.',
+      clarification_slots: [targetSlotId].filter(Boolean),
+      handoff_package: [targetSlotId].filter(Boolean),
+      handoff_action: 'operator_handoff',
+      fallback_action: 'ask_user',
     },
     fallback: template.fallback || {
       action: 'ask_user',
@@ -1702,7 +2986,7 @@ function defaultPromptBlocks() {
     classification_confidence: 'Опишите правила классификации и пороги confidence.',
     react_planning: 'Опишите правила ReAct-планирования и стоп-условия.',
     tool_rules: 'Опишите правила выбора и выполнения ReAct-вызовов ИИ.',
-    escalation_response: 'Опишите условия эскалации и формат ответа пользователю.',
+    escalation_response: 'Опишите условия эскалации и формат ответа клиенту.',
   };
 }
 
@@ -1800,7 +3084,7 @@ function nextConfigItemId(sourceId, items, idKey) {
   return candidate;
 }
 
-function renderSlotSchemaEditor({ slotSchema, slotSchemas, scenarios, resolutionProfiles = [] }) {
+function renderSlotSchemaEditor({ slotSchema, slotSchemas, scenarios, resolutionProfiles = [], confidenceDefaults = {} }) {
   if (state.slotSchemaOperation === 'delete') {
     if (!slotSchema) {
       return '<div class="empty">Нет выбранной схемы для удаления</div>';
@@ -1823,7 +3107,7 @@ function renderSlotSchemaEditor({ slotSchema, slotSchemas, scenarios, resolution
     return '<div class="empty">Схема слотов не выбрана</div>';
   }
   const cards = (current.slots || [])
-    .map((slot, index) => renderSlotCard(slot, index + 1, false, resolutionProfiles))
+    .map((slot, index) => renderSlotCard(slot, index + 1, false, resolutionProfiles, confidenceDefaults))
     .join('');
   return `
     <form class="scenario-editor panel" data-form="slot-schema-editor">
@@ -1840,7 +3124,7 @@ function renderSlotSchemaEditor({ slotSchema, slotSchemas, scenarios, resolution
       <div class="slot-schema-derived">
         <div class="metric-label">Где выбрать профиль разрешения атрибута</div>
         <div class="meta">
-          Раскройте карточку нужного слота. В поле "Способ заполнения" выберите "профиль разрешения",
+          Раскройте карточку нужного слота. В поле "Как получить значение слота" выберите "профиль разрешения",
           затем в поле "Профиль разрешения атрибута" выберите готовый профиль. В сценарии напрямую профиль не выбирается:
           сценарий выбирает схему слотов, а схема слотов уже содержит связь слота с профилем.
         </div>
@@ -1855,7 +3139,7 @@ function renderSlotSchemaEditor({ slotSchema, slotSchemas, scenarios, resolution
   `;
 }
 
-function renderSlotCard(slot = {}, order = '', open = false, resolutionProfiles = []) {
+function renderSlotCard(slot = {}, order = '', open = false, resolutionProfiles = [], confidenceDefaults = {}) {
   const required = slot.required === true;
   const fillMethod = slot.fill_method || legacyFillMethod(slot.source);
   const priorityGroup = slot.priority_group || 'what';
@@ -1869,13 +3153,13 @@ function renderSlotCard(slot = {}, order = '', open = false, resolutionProfiles 
         <div class="metric-label">Выбранный профиль разрешения</div>
         <div class="meta">
           ${escapeHtml(profile.display_name)}. Целевой слот: ${escapeHtml(profile.target_slot_id || 'н/д')}.
-          Выходы: ${escapeHtml(formatList(profile.output_slots))}.
-          Вопрос при неоднозначности: ${escapeHtml(profile.clarification_policy?.question || profile.fallback?.question || 'н/д')}.
+          Выходы: ${escapeHtml(formatList(profileOutputSlotIds(profile)))}.
+          Вопрос при неоднозначности: ${escapeHtml(profile.human_resolution_policy?.clarification_question || profile.fallback?.question || 'н/д')}.
         </div>
       </div>`
     : `<div class="slot-schema-derived">
         <div class="metric-label">Профиль разрешения не выбран</div>
-        <div class="meta">Если слот должен заполняться через AD, CMDB, RAG или несколько попыток поиска, выберите "Способ заполнения = профиль разрешения" и готовый профиль ниже.</div>
+        <div class="meta">Если готового профиля еще нет, оставьте поле профиля пустым и сохраните слот: система создаст черновик профиля для этого слота. Затем настройте его в меню "1. Разрешение атрибутов".</div>
       </div>`;
   const openAttribute = open ? ' open' : '';
   return `
@@ -1909,16 +3193,16 @@ function renderSlotCard(slot = {}, order = '', open = false, resolutionProfiles 
             <select name="required">${booleanOptions(required)}</select>
             <span class="field-help">Если да, без значения этого слота сценарий не должен переходить к выполнению.</span>
           </label>
-          <label>Способ заполнения
+          <label>Как получить значение слота
             <select name="fill_method" data-slot-fill-method>${fillMethodOptions(fillMethod)}</select>
             <span class="field-help">Выберите, откуда платформа берет значение слота.</span>
             <span class="field-help" data-fill-method-help>${escapeHtml(fillMethodHelpText(fillMethod))}</span>
           </label>
         </div>
         <div class="slot-method-section" data-fill-method-section="user_question">
-          <label>Вопрос пользователю
+          <label>Вопрос клиенту
             <textarea name="user_question" rows="3" placeholder="Уточните логин пользователя.">${escapeHtml(slot.user_question || slot.question || '')}</textarea>
-            <span class="field-help">Текст вопроса, который будет отправлен пользователю или показан оператору канала.</span>
+            <span class="field-help">Текст вопроса, который будет отправлен клиенту или показан оператору канала для ввода ответа клиента.</span>
           </label>
         </div>
         <div class="slot-method-section" data-fill-method-section="case">
@@ -1937,11 +3221,21 @@ function renderSlotCard(slot = {}, order = '', open = false, resolutionProfiles 
             <span class="field-help">Необязательные примеры, по одному на строку.</span>
           </label>
         </div>
+        <div class="slot-method-section" data-fill-method-section="slot_autofill">
+          <div class="slot-schema-derived">
+            <div class="metric-label">ReAct-автозаполнение</div>
+            <div class="meta">Связь с ReAct-вызовом и полем результата настраивается в меню "Сценарии обработки -> 0.1 Автозаполнение слотов". Runtime сам не создает слоты, он только заполняет уже активированную схему.</div>
+          </div>
+          <label>Источник автозаполнения
+            <input name="autofill_source_ref" value="${escapeHtml(slot.autofill_source_ref || '')}" autocomplete="off" placeholder="autofill.profile:users.0.login">
+            <span class="field-help">Служебная подсказка для администратора. На выполнение влияет профиль автозаполнения, а не это поле.</span>
+          </label>
+        </div>
         <div class="slot-method-section" data-fill-method-section="resolution_profile">
           ${profileHint}
           <label>Профиль разрешения атрибута
             <select name="resolution_profile_id">${resolutionProfileOptions(resolutionProfiles, slot.resolution_profile_id, slot.slot_id)}</select>
-            <span class="field-help">Профиль задает порядок LLM extraction, ReAct-вызовов, поиска по истории и уточняющих вопросов.</span>
+            <span class="field-help">Профиль задает порядок извлечения моделью, endpoint-операций чтения и уточняющих вопросов.</span>
           </label>
           <label>Запасной вопрос
             <textarea name="fallback_question" rows="3" placeholder="Уточните ФИО, должность или табельный номер пользователя.">${escapeHtml(slot.fallback_question || slot.question || '')}</textarea>
@@ -1958,14 +3252,19 @@ function renderSlotCard(slot = {}, order = '', open = false, resolutionProfiles 
           <div class="grid two">
           <label>Порядок вопроса
             <input name="question_order" type="number" min="1" max="999" value="${escapeHtml(order || '')}">
-            <span class="field-help">Позиция в очереди обогащения. Учитывается для вопросов пользователю, профилей разрешения и ручного заполнения оператором.</span>
+            <span class="field-help">Позиция в очереди обогащения. Учитывается для вопросов клиенту, профилей разрешения и ручного заполнения оператором.</span>
           </label>
           </div>
         </div>
         <details class="slot-method-section">
           <summary>Переопределение порогов для слота</summary>
-          <div class="meta">Заполняйте только для чувствительных слотов. Пустые поля наследуются от сценария и системных порогов.</div>
-          ${renderConfidenceThresholdInputs('slot_confidence', slot.confidence_overrides || {})}
+          ${renderConfidenceOverrideControls({
+            prefix: 'slot_confidence',
+            overrides: slot.confidence_overrides || {},
+            baseThresholds: confidenceDefaults,
+            enabledText: 'Слот использует собственные пороги для исключительного случая.',
+            disabledText: 'Переопределение выключено. Сейчас используются системные настройки.',
+          })}
         </details>
       </div>
     </details>
@@ -1996,18 +3295,17 @@ function legacyFillMethod(source) {
 }
 
 function fillMethodOptions(selected) {
-  const values = ['user_question', 'case', 'llm_extraction', 'resolution_profile', 'operator_manual'];
-  return values
-    .map((value) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${visibleLabels[value] || value}</option>`)
-    .join('');
+  const values = ['user_question', 'llm_extraction', 'slot_autofill', 'resolution_profile', 'operator_manual'];
+  return activeOptionList(values, selected);
 }
 
 function fillMethodHelpText(method) {
   const help = {
-    user_question: 'Платформа задает вопрос пользователю или оператору канала и ждет ответ.',
+    user_question: 'Платформа задает вопрос клиенту или показывает его оператору канала для ввода ответа клиента.',
     case: 'Значение уже есть в текущем обращении: канал, карточка заявки, сохраненный контекст или системные поля. Внешние системы здесь не вызываются.',
     llm_extraction: 'Модель извлекает значение из текста обращения и уже собранного контекста без вызова внешних систем.',
-    resolution_profile: 'Используется отдельный профиль с шагами LLM, RAG, ReAct-вызовами, поиском по истории и уточняющими вопросами.',
+    slot_autofill: 'Read-only ReAct-вызов детерминированно заполняет один или несколько слотов по настроенному профилю автозаполнения.',
+    resolution_profile: 'Используется отдельный профиль с извлечением моделью, endpoint-операцией чтения, LLM-правилом и уточняющими вопросами.',
     operator_manual: 'Значение вносит оператор вручную; агент не пытается получить его автоматически.',
   };
   return help[method] || 'Выберите способ получения значения слота.';
@@ -2036,12 +3334,12 @@ const confidenceThresholdFields = [
   },
 ];
 
-function renderConfidenceThresholdInputs(prefix, thresholds = {}, { required = false } = {}) {
+function renderConfidenceThresholdInputs(prefix, thresholds = {}, { required = false, disabled = false } = {}) {
   return `
     <div class="grid two">
       ${confidenceThresholdFields.map((field) => `
         <label>${escapeHtml(field.label)}
-          <input name="${escapeHtml(`${prefix}_${field.key}`)}" type="number" min="0" max="1" step="0.01" value="${escapeHtml(thresholds?.[field.key] ?? '')}" ${required ? 'required' : ''}>
+          <input data-confidence-input name="${escapeHtml(`${prefix}_${field.key}`)}" type="number" min="0" max="1" step="0.01" value="${escapeHtml(thresholds?.[field.key] ?? '')}" ${required ? 'required' : ''} ${disabled ? 'disabled' : ''}>
           <span class="field-help">${escapeHtml(field.help)}</span>
         </label>
       `).join('')}
@@ -2049,7 +3347,60 @@ function renderConfidenceThresholdInputs(prefix, thresholds = {}, { required = f
   `;
 }
 
+function hasConfidenceOverrides(thresholds = {}) {
+  return confidenceThresholdFields.some((field) => thresholds?.[field.key] !== undefined && thresholds?.[field.key] !== null && thresholds?.[field.key] !== '');
+}
+
+function mergeConfidenceThresholds(baseThresholds = {}, overrides = {}) {
+  const result = {};
+  for (const field of confidenceThresholdFields) {
+    const override = overrides?.[field.key];
+    const base = baseThresholds?.[field.key];
+    result[field.key] = override ?? base ?? '';
+  }
+  return result;
+}
+
+function renderConfidenceOverrideControls({
+  prefix,
+  overrides = {},
+  baseThresholds = {},
+  enabledText,
+  disabledText,
+}) {
+  const enabled = hasConfidenceOverrides(overrides);
+  const values = mergeConfidenceThresholds(baseThresholds, enabled ? overrides : {});
+  return `
+    <div class="confidence-override" data-confidence-override>
+      <label class="boolean-flag">
+        <span>Включить</span>
+        <input type="hidden" name="${escapeHtml(`${prefix}_enabled`)}" value="false">
+        <input data-confidence-override-enabled name="${escapeHtml(`${prefix}_enabled`)}" type="checkbox" value="true" ${enabled ? 'checked' : ''}>
+      </label>
+      <div class="meta" data-confidence-override-meta data-enabled-text="${escapeHtml(enabledText)}" data-disabled-text="${escapeHtml(disabledText)}">${escapeHtml(enabled ? enabledText : disabledText)}</div>
+      ${renderConfidenceThresholdInputs(prefix, values, { required: enabled, disabled: !enabled })}
+    </div>
+  `;
+}
+
+function syncConfidenceOverrideBlock(block) {
+  if (!block) return;
+  const enabled = block.querySelector('[data-confidence-override-enabled]')?.checked === true;
+  block.querySelectorAll('[data-confidence-input]').forEach((input) => {
+    input.disabled = !enabled;
+    input.required = enabled;
+  });
+  const meta = block.querySelector('[data-confidence-override-meta]');
+  if (meta) {
+    meta.textContent = enabled ? meta.dataset.enabledText : meta.dataset.disabledText;
+  }
+}
+
 function parseConfidenceThresholdsFromForm(data, prefix, { required = false } = {}) {
+  const enabledValues = data.getAll(`${prefix}_enabled`).map((value) => String(value));
+  if (!required && enabledValues.length && !enabledValues.includes('true')) {
+    return {};
+  }
   const result = {};
   for (const field of confidenceThresholdFields) {
     const raw = String(data.get(`${prefix}_${field.key}`) ?? '').trim();
@@ -2065,6 +3416,10 @@ function parseConfidenceThresholdsFromForm(data, prefix, { required = false } = 
 }
 
 function parseConfidenceThresholdsFromCard(card, prefix) {
+  const toggle = card.querySelector(`[data-confidence-override-enabled][name="${prefix}_enabled"]`);
+  if (toggle && toggle.checked !== true) {
+    return {};
+  }
   const result = {};
   for (const field of confidenceThresholdFields) {
     const raw = card.querySelector(`[name="${prefix}_${field.key}"]`)?.value?.trim() || '';
@@ -2078,7 +3433,7 @@ function parseConfidenceThresholdsFromCard(card, prefix) {
 function resolutionProfileOptions(profiles, selected, slotId) {
   const options = ['<option value="">не выбран</option>'];
   const filtered = (profiles || []).filter((profile) => {
-    const slotAllowed = !slotId || profile.output_slots?.includes(slotId) || selected === profile.profile_id;
+    const slotAllowed = !slotId || profileOutputSlotIds(profile).includes(slotId) || selected === profile.profile_id;
     return slotAllowed;
   });
   for (const profile of filtered) {
@@ -2104,8 +3459,7 @@ function routeCreateTemplate(source, routes) {
       human_handoff_below: 0.5,
     },
     rules: template.rules || {
-      keywords: [],
-      negative_keywords: [],
+      rule_items: [defaultClassificationRule()],
     },
     top_categories_on_low_confidence: template.top_categories_on_low_confidence || 3,
   };
@@ -2139,18 +3493,18 @@ function renderRouteEditor({ route, routes, scenarios }) {
       <label>Название<input name="display_name" value="${escapeHtml(current.display_name || '')}" autocomplete="off"></label>
       <div class="grid two">
         <label>Приоритет<select name="priority">${optionList(['P1', 'P2', 'P3', 'P4'], current.priority)}</select></label>
-        <label>Маршрут<select name="route">${optionList(['auto_agent', 'agent_with_confirmation', 'human_review', 'major_incident', 'approver'], current.route)}</select></label>
+        <label>Решение маршрутизации<select name="route">${optionList(['auto_agent', 'agent_with_confirmation', 'human_review', 'major_incident', 'approver'], current.route)}</select></label>
         <label>Состояние workflow<input name="workflow_state_id" value="${escapeHtml(current.workflow_state_id || '')}" autocomplete="off"></label>
-        <label>Top категорий<input name="top_categories_on_low_confidence" type="number" min="1" max="5" value="${escapeHtml(current.top_categories_on_low_confidence || 3)}"></label>
+        <label>До N категорий при низкой уверенности
+          <input name="top_categories_on_low_confidence" type="number" min="1" max="5" value="${escapeHtml(current.top_categories_on_low_confidence || 3)}">
+          <span class="field-help">Сколько вариантов показать оператору. Если маршрутов меньше, будут показаны все доступные.</span>
+        </label>
         <label>Порог правил<input name="rules_min" type="number" min="0" max="1" step="0.01" value="${escapeHtml(current.confidence?.rules_min ?? 0.85)}"></label>
         <label>Порог LLM<input name="llm_min" type="number" min="0" max="1" step="0.01" value="${escapeHtml(current.confidence?.llm_min ?? 0.7)}"></label>
         <label>Человек ниже<input name="human_handoff_below" type="number" min="0" max="1" step="0.01" value="${escapeHtml(current.confidence?.human_handoff_below ?? 0.5)}"></label>
       </div>
       <label>Действие<textarea name="action" rows="3">${escapeHtml(current.action || '')}</textarea></label>
-      <div class="grid two">
-        <label>Ключевые слова<input name="keywords" value="${escapeHtml(csv(current.rules?.keywords))}"></label>
-        <label>Негативные ключевые слова<input name="negative_keywords" value="${escapeHtml(csv(current.rules?.negative_keywords))}"></label>
-      </div>
+      ${renderClassificationRules(current)}
       ${usagePanel(scenarios, 'classification_route_id', current.route_id)}
       <div class="scenario-editor-actions">
         <button class="primary" type="submit">${state.routeOperation === 'create' ? 'Создать маршрут' : 'Сохранить классификацию'}</button>
@@ -2213,7 +3567,7 @@ function renderPolicyEditor({ policy, policies, scenarios }) {
       <label>Название<input name="display_name" value="${escapeHtml(current.display_name || '')}" autocomplete="off"></label>
       <div class="grid two">
         <label>Лимит итераций<input name="max_iterations" type="number" min="1" max="20" value="${escapeHtml(current.max_iterations || 6)}"></label>
-        <label>Ошибок ReAct-вызовов подряд до передачи<input name="consecutive_tool_errors_to_escalate" type="number" min="1" max="10" value="${escapeHtml(current.consecutive_tool_errors_to_escalate || 2)}"></label>
+        <label>Ошибок ReAct-вызовов подряд до эскалации<input name="consecutive_tool_errors_to_escalate" type="number" min="1" max="10" value="${escapeHtml(current.consecutive_tool_errors_to_escalate || 2)}"></label>
       </div>
       <fieldset class="launch-editor">
         <legend>Разрешенные группы действий ReAct</legend>
@@ -2222,7 +3576,7 @@ function renderPolicyEditor({ policy, policies, scenarios }) {
       </fieldset>
       <fieldset class="launch-editor">
         <legend>Стоп-условия</legend>
-        <div class="meta">Когда ReAct-loop должен остановиться и перейти к уточнению, результату или передаче.</div>
+        <div class="meta">Когда ReAct-loop должен остановиться и перейти к уточнению у клиента, результату или эскалации оператору.</div>
         ${renderChoiceChecklist('stop_conditions', reactStopConditionChoices, current.stop_conditions || [])}
       </fieldset>
       ${usagePanel(scenarios, 'orchestrator_policy_id', current.policy_id)}
@@ -2341,6 +3695,10 @@ function endpointForBinding(binding, endpoints) {
 function operationForBinding(binding, endpoints) {
   const endpoint = endpointForBinding(binding, endpoints);
   return endpoint?.operations?.[binding?.operation_id] || null;
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value ?? {}));
 }
 
 function operationBindingSummary(binding, endpoints) {
@@ -2641,7 +3999,7 @@ function renderLaunchCard(
   integrationEndpoints = state.lastData.integrationEndpoints || [],
   slotContext = state.lastData.toolMatrixSlotContext || { slots: [], scenarioNames: [], scenarioCount: 0, usedByMatrix: false },
 ) {
-  const launchMode = launch.target_execution_level || launch.execution_level || 'operator_approval';
+  const launchMode = launch.execution_level || 'operator_approval';
   const toolName = launch.tool_name || (tools || [])[0]?.tool_name || '';
   const tool = findToolInCatalog(tools, toolName);
   const binding = currentToolBinding(tool);
@@ -2649,7 +4007,7 @@ function renderLaunchCard(
   const operationId = binding?.operation_id || '';
   const bindingStatus = binding
     ? operationBindingSummary(binding, integrationEndpoints)
-    : 'У выбранного ReAct-вызова ИИ нет привязки операции. Настройте ее в меню "Привязка операций".';
+    : 'У выбранного ReAct-вызова ИИ нет привязки операции. Настройте ее в меню "Вызовы и интеграции -> Привязка операций".';
   return `
     <fieldset class="launch-editor" data-launch-card>
       <legend>${escapeHtml(toolName || `Запуск ${index + 1}`)}</legend>
@@ -2666,19 +4024,19 @@ function renderLaunchCard(
       )}
       ${renderLaunchGroup(
         'Текущая привязка операции',
-        'Техническое подключение выбирается в меню "Привязка операций" и подставляется сюда автоматически.',
+        'Техническое подключение выбирается в меню "Вызовы и интеграции -> Привязка операций" и подставляется сюда автоматически.',
         `<div class="${binding ? 'meta' : 'field-help'}" data-launch-binding-status>${escapeHtml(bindingStatus)}</div>`,
       )}
       ${renderLaunchGroup(
         'Параметры вызова',
-        'Какие слоты, поля кейса, контекст, константы или секреты заполняют параметры выбранного вызова. Технический payload endpoint настраивается в "Привязка операций". Required slots вычисляются из источников вида slot:<slot_id>.',
+        'Какие слоты, поля кейса, контекст, константы или секреты заполняют параметры выбранного вызова. Технический payload endpoint настраивается в "Вызовы и интеграции -> Привязка операций". Required slots вычисляются из источников вида slot:<slot_id>.',
         parameterBindingsEditor(tool, launch.parameter_bindings || {}, slotContext),
       )}
       ${renderLaunchGroup(
         'Контроль запуска',
         'Сценарная политика исполнения: согласование, риск, аудит, логирование и остановка при ошибке.',
         `<div class="grid two">
-          <label>Вид запуска<select name="execution_mode_${index}">${optionList(['auto', 'operator_approval', 'approver_approval', 'blocked'], launchMode)}</select></label>
+          <label>Режим исполнения сейчас<select name="execution_mode_${index}">${activeOptionList(activeLaunchExecutionModes, launchMode)}</select></label>
           <label>Риск<select name="risk_level_${index}">${optionList(['low', 'medium', 'high', 'critical', 'blocked'], launch.risk_level)}</select></label>
           <label>Роль согласования<input name="approval_role_${index}" value="${escapeHtml(launch.approval_role || '')}" autocomplete="off"></label>
           <label>Аудит<select name="audit_required_${index}">${booleanOptions(launch.audit_required)}</select></label>
@@ -2734,11 +4092,11 @@ function renderEscalationEditor({ policy, policies, scenarios }) {
     return `
       <form class="scenario-editor panel" data-form="escalation-delete">
         <div>
-          <div class="metric-label">Удаляемая политика эскалации</div>
+          <div class="metric-label">Удаляемая политика решения и эскалации оператору</div>
           <div class="scenario-title">${escapeHtml(policy.display_name)}</div>
         </div>
         ${usagePanel(scenarios, 'escalation_policy_id', policy.policy_id)}
-        <button class="danger" type="submit">Удалить политику эскалации</button>
+        <button class="danger" type="submit">Удалить политику решения и эскалации</button>
       </form>
     `;
   }
@@ -2746,7 +4104,7 @@ function renderEscalationEditor({ policy, policies, scenarios }) {
     ? escalationCreateTemplate(policy, policies)
     : policy;
   if (!current?.policy_id) {
-    return '<div class="empty">Политика эскалации не выбрана</div>';
+    return '<div class="empty">Политика решения и эскалации не выбрана</div>';
   }
   return `
     <form class="scenario-editor panel" data-form="escalation-editor">
@@ -2754,25 +4112,25 @@ function renderEscalationEditor({ policy, policies, scenarios }) {
       <label>Название<input name="display_name" value="${escapeHtml(current.display_name || '')}" autocomplete="off"></label>
       <div class="grid two">
         <label>Автозакрытие требует успех ReAct-вызова<select name="requires_tool_success">${booleanOptions(current.auto_close?.requires_tool_success)}</select></label>
-        <label>Автозакрытие требует подтверждение пользователя<select name="requires_user_confirmation">${booleanOptions(current.auto_close?.requires_user_confirmation)}</select></label>
+        <label>Автозакрытие требует подтверждение клиента<select name="requires_user_confirmation">${booleanOptions(current.auto_close?.requires_user_confirmation)}</select></label>
         <label>Ожидание приостанавливает SLA<select name="pause_sla">${booleanOptions(current.waiting?.pause_sla)}</select></label>
-        <label>Автозакрытие ожидания, часов<input name="auto_close_after_hours" type="number" min="1" max="168" value="${escapeHtml(current.waiting?.auto_close_after_hours || 24)}"></label>
+        <label>Автозакрытие ожидания клиента, часов<input name="auto_close_after_hours" type="number" min="1" max="168" value="${escapeHtml(current.waiting?.auto_close_after_hours || 24)}"></label>
         <label>Major Incident threshold<input name="affected_users_threshold" type="number" min="1" max="100000" value="${escapeHtml(current.major_incident?.affected_users_threshold || 10)}"></label>
       </div>
       <fieldset class="launch-editor">
-        <legend>Условия передачи</legend>
-        <div class="meta">Когда автообработка останавливается и кейс передается в выбранный канал взаимодействия.</div>
+        <legend>Условия эскалации оператору</legend>
+        <div class="meta">Когда AI останавливает самостоятельную обработку и кейс передается оператору через выбранный канал взаимодействия.</div>
         ${renderChoiceChecklist('handoff_conditions', handoffConditionChoices, current.handoff_conditions || [])}
       </fieldset>
       <fieldset class="launch-editor">
-        <legend>Пакет передачи</legend>
-        <div class="meta">Какие данные попадут в пакет контекста для канала взаимодействия. Обязательные пункты нельзя отключить.</div>
+        <legend>Пакет эскалации оператору</legend>
+        <div class="meta">Какие данные попадут в пакет контекста для оператора или функциональной группы. Обязательные пункты нельзя отключить.</div>
         ${renderChoiceChecklist('handoff_package', handoffPackageChoices, current.handoff_package || [])}
       </fieldset>
-      <label>Шаблон уведомления пользователя<textarea name="user_notification_template" rows="4">${escapeHtml(current.user_notification_template || '')}</textarea></label>
+      <label>Шаблон уведомления клиента<textarea name="user_notification_template" rows="4">${escapeHtml(current.user_notification_template || '')}</textarea></label>
       ${usagePanel(scenarios, 'escalation_policy_id', current.policy_id)}
       <div class="scenario-editor-actions">
-        <button class="primary" type="submit">${state.escalationOperation === 'create' ? 'Создать политику эскалации' : 'Сохранить решение и эскалацию'}</button>
+        <button class="primary" type="submit">${state.escalationOperation === 'create' ? 'Создать политику решения и эскалации' : 'Сохранить решение и эскалацию'}</button>
       </div>
     </form>
   `;
@@ -2832,9 +4190,23 @@ function renderPromptPackEditor({ promptPack, packs, scenarios }) {
   `;
 }
 
-function optionList(values, selected) {
+function optionList(values, selected, labels = visibleLabels) {
   return values
-    .map((value) => `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(visibleLabels[value] || value)}</option>`)
+    .map((value) => `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(labels[value] || value)}</option>`)
+    .join('');
+}
+
+function activeOptionList(values, selected, labels = visibleLabels) {
+  const options = [...values];
+  if (selected && !options.includes(selected)) {
+    options.unshift(selected);
+  }
+  return options
+    .map((value) => {
+      const inactive = !values.includes(value);
+      const suffix = inactive ? ' (не исполняется)' : '';
+      return `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml((labels[value] || value) + suffix)}</option>`;
+    })
     .join('');
 }
 
@@ -2872,6 +4244,92 @@ function csv(items) {
   return (items || []).join(', ');
 }
 
+const classificationMatchTypeLabels = {
+  phrase: 'фраза',
+  word: 'слово',
+  contains: 'вхождение',
+};
+
+const classificationPolarityLabels = {
+  positive: 'позитивное',
+  negative: 'негативное',
+};
+
+function defaultClassificationRule() {
+  return {
+    text: '',
+    match_type: 'phrase',
+    polarity: 'positive',
+    weight: 0.5,
+    required: false,
+    blocking: false,
+    explanation: '',
+  };
+}
+
+function classificationRuleItems(route = {}) {
+  return route.rules?.rule_items?.length
+    ? route.rules.rule_items
+    : [defaultClassificationRule()];
+}
+
+function renderClassificationRuleCard(rule = {}, index = 0, open = false) {
+  const current = { ...defaultClassificationRule(), ...rule };
+  const title = current.text || `Правило ${index + 1}`;
+  return `
+    <details class="slot-card" data-route-rule-card${open ? ' open' : ''}>
+      <summary>
+        <span>${escapeHtml(title)}</span>
+        <span class="slot-card-actions">
+          <button class="ghost danger" type="button" data-action="route-rule-remove">Удалить</button>
+        </span>
+      </summary>
+      <div class="grid two">
+        <label>Текст признака
+          <input name="rule_text" value="${escapeHtml(current.text || '')}" autocomplete="off" placeholder="сброс пароля">
+          <span class="field-help">Слово или фраза, которую ищем в тексте обращения.</span>
+        </label>
+        <label>Тип совпадения
+          <select name="rule_match_type">${optionList(Object.keys(classificationMatchTypeLabels), current.match_type, classificationMatchTypeLabels)}</select>
+          <span class="field-help">Фраза ищется как текст, слово - с границами слова, вхождение - как часть строки.</span>
+        </label>
+        <label>Влияние
+          <select name="rule_polarity">${optionList(Object.keys(classificationPolarityLabels), current.polarity, classificationPolarityLabels)}</select>
+          <span class="field-help">Позитивное правило повышает уверенность маршрута, негативное снижает ее.</span>
+        </label>
+        <label>Вес
+          <input name="rule_weight" type="number" min="0.01" max="1" step="0.01" value="${escapeHtml(current.weight ?? 0.5)}">
+          <span class="field-help">Сила признака от 0.01 до 1.</span>
+        </label>
+        <label>Обязательное
+          <select name="rule_required">${booleanOptions(current.required)}</select>
+          <span class="field-help">Для позитивного правила: если признак не найден, маршрут получает confidence 0.</span>
+        </label>
+        <label>Блокирующее
+          <select name="rule_blocking">${booleanOptions(current.blocking)}</select>
+          <span class="field-help">Для негативного правила: если признак найден, маршрут блокируется.</span>
+        </label>
+      </div>
+      <label>Пояснение
+        <textarea name="rule_explanation" rows="2" placeholder="Почему этот признак относится к маршруту">${escapeHtml(current.explanation || '')}</textarea>
+      </label>
+    </details>
+  `;
+}
+
+function renderClassificationRules(route = {}) {
+  return `
+    <fieldset class="launch-editor">
+      <legend>Правила классификации</legend>
+      <div class="meta">Правила оцениваются по всем маршрутам. Позитивные признаки повышают уверенность, негативные снижают ее или блокируют маршрут.</div>
+      <div data-route-rules-list>
+        ${classificationRuleItems(route).map((rule, index) => renderClassificationRuleCard(rule, index, index === 0)).join('')}
+      </div>
+      <button type="button" data-action="route-rule-add">Добавить правило</button>
+    </fieldset>
+  `;
+}
+
 function jsonPretty(value) {
   return JSON.stringify(value, null, 2);
 }
@@ -2905,7 +4363,6 @@ async function renderDashboard() {
         ${metric('Права', String(session.permissions.length))}
       </div>`,
     ),
-    section('Исходные данные панели', jsonBlock(dashboard)),
   ].join('');
 }
 
@@ -2959,18 +4416,20 @@ async function loadExecutionCatalogContext({ includeAudit = false } = {}) {
     api('/admin/config/active/n8n_workflows'),
     api('/admin/config/active/tool_launch_matrix'),
     api('/admin/config/active/attribute_resolution_profiles'),
+    api('/admin/config/active/slot_autofill_profiles'),
     api('/admin/config/active/interaction_channels'),
   ];
   if (includeAudit) {
     requests.push(api('/admin/security/audit?limit=30'));
   }
-  const [toolsActive, endpointsActive, n8nActive, matrixActive, resolutionActive, channelsActive, audit] = await Promise.all(requests);
+  const [toolsActive, endpointsActive, n8nActive, matrixActive, resolutionActive, slotAutofillActive, channelsActive, audit] = await Promise.all(requests);
   const context = {
     tools: toolsActive.payload?.tools || [],
     endpoints: endpointsActive.payload?.endpoints || [],
     workflows: n8nActive.payload?.workflows || [],
     matrices: matrixActive.payload?.matrices || [],
     resolutionProfiles: resolutionActive.payload?.profiles || [],
+    slotAutofillProfiles: slotAutofillActive.payload?.profiles || [],
     channels: channelsActive.payload?.channels || [],
     audit: audit || { events: [] },
   };
@@ -2987,16 +4446,20 @@ async function loadExecutionCatalogContext({ includeAudit = false } = {}) {
   }
   const selectedBindingTool = context.tools.find((tool) => tool.tool_name === state.operationBindingToolName);
   const currentBinding = currentToolBinding(selectedBindingTool);
-  if (currentBinding) {
+  const bindingToolChanged = state.operationBindingLastToolName !== state.operationBindingToolName;
+  if (bindingToolChanged) {
+    state.operationBindingLastToolName = state.operationBindingToolName;
     state.operationBindingEndpointId = currentBinding?.endpoint_id || context.endpoints[0]?.endpoint_id || '';
-    state.operationBindingOperationId = currentBinding.operation_id || '';
+    state.operationBindingOperationId = currentBinding?.operation_id || '';
   } else if (!context.endpoints.some((endpoint) => endpoint.endpoint_id === state.operationBindingEndpointId)) {
-    state.operationBindingEndpointId = context.endpoints[0]?.endpoint_id || '';
+    state.operationBindingEndpointId = currentBinding?.endpoint_id || context.endpoints[0]?.endpoint_id || '';
   }
   const selectedEndpoint = context.endpoints.find((endpoint) => endpoint.endpoint_id === state.operationBindingEndpointId);
   const operationIds = Object.keys(selectedEndpoint?.operations || {});
   if (!operationIds.includes(state.operationBindingOperationId)) {
-    state.operationBindingOperationId = currentBinding?.operation_id && operationIds.includes(currentBinding.operation_id)
+    state.operationBindingOperationId = currentBinding?.endpoint_id === state.operationBindingEndpointId
+      && currentBinding?.operation_id
+      && operationIds.includes(currentBinding.operation_id)
       ? currentBinding.operation_id
       : operationIds[0] || '';
   }
@@ -3040,7 +4503,7 @@ async function renderIntegrations() {
 }
 
 async function renderReactCalls() {
-  const { tools, matrices, resolutionProfiles, channels } = await loadExecutionCatalogContext();
+  const { tools, matrices, resolutionProfiles, slotAutofillProfiles, channels } = await loadExecutionCatalogContext();
   const selectedTool = tools.find((tool) => tool.tool_name === state.toolCatalogName) || null;
   elements.viewContent.innerHTML = [
     section(
@@ -3051,6 +4514,7 @@ async function renderReactCalls() {
         tools,
         matrices,
         resolutionProfiles,
+        slotAutofillProfiles,
         channels,
       })}`,
     ),
@@ -3059,20 +4523,25 @@ async function renderReactCalls() {
 }
 
 async function renderOperationBindings() {
-  const { tools, endpoints, matrices, resolutionProfiles, channels } = await loadExecutionCatalogContext();
-  const selectedTool = tools.find((tool) => tool.tool_name === state.operationBindingToolName) || null;
+  const { tools, endpoints, matrices, resolutionProfiles, slotAutofillProfiles, channels } = await loadExecutionCatalogContext();
+  const selectedTool = state.operationBindingMode === 'create'
+    ? null
+    : tools.find((tool) => tool.tool_name === state.operationBindingToolName) || null;
   elements.viewContent.innerHTML = [
     section(
       'Привязка операций',
-      `${operationBindingControls(tools, selectedTool)}
-      ${renderOperationBindingEditor({
-        tool: selectedTool,
-        tools,
-        endpoints,
-        matrices,
-        resolutionProfiles,
-        channels,
-      })}`,
+      `${operationBindingControls(tools)}
+      ${state.operationBindingMode === 'create'
+        ? renderOperationBindingCreateEditor({ tools, endpoints })
+        : renderOperationBindingEditor({
+          tool: selectedTool,
+          tools,
+          endpoints,
+          matrices,
+          resolutionProfiles,
+          slotAutofillProfiles,
+          channels,
+        })}`,
     ),
   ].join('');
   attachCatalogSelect('operationBindingToolSelect', 'operationBindingToolName', renderOperationBindings);
@@ -3106,12 +4575,18 @@ function toolCatalogControls(tools) {
   `;
 }
 
-function operationBindingControls(tools, selectedTool) {
+function operationBindingControls(tools) {
   return `
-    <div class="toolbar compact">
-      <label>ReAct-вызов ИИ<select id="operationBindingToolSelect">${referenceOptions(tools, 'tool_name', state.operationBindingToolName, reactCallLabel)}</select></label>
-      <button type="button" data-action="operation-binding-load">Загрузить</button>
+    <div class="scenario-menu">
+      <button type="button" class="${state.operationBindingMode === 'bind' ? 'primary' : ''}" data-action="operation-binding-mode" data-mode="bind">Привязать существующий</button>
+      <button type="button" class="${state.operationBindingMode === 'create' ? 'primary' : ''}" data-action="operation-binding-mode" data-mode="create">Создать и привязать ReAct-вызов ИИ</button>
     </div>
+    ${state.operationBindingMode === 'bind' ? `
+      <div class="toolbar compact">
+        <label>ReAct-вызов ИИ<select id="operationBindingToolSelect">${referenceOptions(tools, 'tool_name', state.operationBindingToolName, reactCallLabel)}</select></label>
+        <button type="button" data-action="operation-binding-load">Загрузить</button>
+      </div>
+    ` : ''}
   `;
 }
 
@@ -3201,6 +4676,13 @@ function defaultOperationRequestSchema() {
   };
 }
 
+function defaultOperationResponseSchema() {
+  return {
+    type: 'object',
+    additionalProperties: true,
+  };
+}
+
 function operationSummary(endpoint) {
   const entries = Object.entries(endpoint?.operations || {});
   if (!entries.length) return 'операции не настроены';
@@ -3258,11 +4740,19 @@ function integrationOperationUsage(endpointId, operationId, tools, workflows) {
   return refs;
 }
 
+function operationDeleteDisabledReason(usage) {
+  if (!usage?.length) {
+    return 'Операцию можно удалить.';
+  }
+  return `Нельзя удалить: сначала уберите связи: ${usage.join('; ')}.`;
+}
+
 function endpointCreateTemplate(source, endpoints) {
   const template = source || endpoints[0] || {};
+  const adapterType = activeEndpointAdapterTypes.includes(template.adapter_type) ? template.adapter_type : 'mock';
   return {
     endpoint_id: nextConfigItemId(template.endpoint_id || 'custom.endpoint', endpoints, 'endpoint_id'),
-    adapter_type: template.adapter_type || 'mock',
+    adapter_type: adapterType,
     display_name: '',
     enabled: true,
     disabled_reason: '',
@@ -3275,6 +4765,10 @@ function endpointCreateTemplate(source, endpoints) {
         description: 'Опишите назначение операции.',
         method: 'POST',
         path: '/custom/operation',
+        request_schema: defaultOperationRequestSchema(),
+        response_schema: defaultOperationResponseSchema(),
+        contract_version: '1.0',
+        contract_status: 'draft',
         timeout_seconds: 10,
       },
     },
@@ -3304,9 +4798,11 @@ function renderEndpointConnectionEditor({ endpoint, endpoints, tools, workflows 
   if (!current?.endpoint_id) {
     return '<div class="empty">Подключение не выбрано</div>';
   }
+  const operationCount = Object.keys(current.operations || {}).length;
   const operationCards = Object.entries(current.operations || {})
     .map(([operationId, operation], index) => renderEndpointOperationCard({
       endpointId: current.endpoint_id,
+      adapterType: current.adapter_type,
       operationId,
       operation,
       tools,
@@ -3322,7 +4818,7 @@ function renderEndpointConnectionEditor({ endpoint, endpoints, tools, workflows 
           <span class="field-help">Стабильный ключ подключения. Используется в логах, bindings и callback URL.</span>
         </label>
         <label>Название<input name="display_name" value="${escapeHtml(current.display_name || '')}" autocomplete="off"></label>
-        <label>Тип адаптера<select name="adapter_type">${optionList(['mock', 'n8n_webhook', 'direct_http', 'queue'], current.adapter_type)}</select></label>
+        <label>Тип адаптера<select name="adapter_type">${activeOptionList(activeEndpointAdapterTypes, current.adapter_type)}</select></label>
         <label>Включен<select name="enabled">${booleanOptions(current.enabled)}</select></label>
         <label>Причина отключения<input name="disabled_reason" value="${escapeHtml(current.disabled_reason || '')}" autocomplete="off"></label>
         <label>Базовый URL<input name="base_url" value="${escapeHtml(current.base_url || '')}" autocomplete="off" placeholder="http://127.0.0.1:5678/webhook"></label>
@@ -3331,12 +4827,17 @@ function renderEndpointConnectionEditor({ endpoint, endpoints, tools, workflows 
         <label>Имя заголовка<input name="auth_header_name" value="${escapeHtml(current.auth?.header_name || '')}" autocomplete="off" placeholder="X-ServiceDesk-Token"></label>
         <label>Env-переменная токена<input name="auth_token_env" value="${escapeHtml(current.auth?.token_env || '')}" autocomplete="off" placeholder="N8N_WEBHOOK_TOKEN"></label>
       </div>
-      <fieldset class="launch-editor">
-        <legend>Операции подключения</legend>
+      <details class="launch-editor endpoint-operations-toggle" data-endpoint-operations-section>
+        <summary class="endpoint-operations-summary">
+          <div class="slot-card-summary-main">
+            <strong>Операции подключения</strong>
+            <span>${escapeHtml(operationCount ? `Настроено операций: ${operationCount}` : 'Операции не настроены')}</span>
+          </div>
+        </summary>
         <div class="meta">Операция описывает конкретный технический вызов: путь webhook, HTTP-метод, topic или тестовый ответ mock.</div>
         <div id="endpointOperationCards" class="slot-card-list">${operationCards}</div>
         <button type="button" data-action="endpoint-operation-add">Добавить операцию</button>
-      </fieldset>
+      </details>
       ${usageListPanel('Где используется', integrationEndpointUsage(current.endpoint_id, tools, workflows), 'Не используется. Подключение можно удалить.')}
       <div class="scenario-editor-actions">
         <button class="primary" type="submit">${state.integrationEndpointOperation === 'create' ? 'Создать подключение' : 'Сохранить подключение'}</button>
@@ -3345,16 +4846,233 @@ function renderEndpointConnectionEditor({ endpoint, endpoints, tools, workflows 
   `;
 }
 
-function renderEndpointOperationCard({ endpointId, operationId, operation = {}, tools = [], workflows = [], open = false }) {
+function schemaRequiredSet(schema = {}) {
+  return new Set(Array.isArray(schema.required) ? schema.required : []);
+}
+
+function schemaPropertyType(property = {}) {
+  if (property.type === 'array') return 'array';
+  if (property.type === 'object' || property.properties || property.additionalProperties) return 'object';
+  return operationContractTypes.includes(property.type) ? property.type : 'string';
+}
+
+function schemaArrayItemType(property = {}) {
+  const itemType = property.items?.type;
+  return operationArrayItemTypes.includes(itemType) ? itemType : 'object';
+}
+
+function operationSchemaFields(schema = {}) {
+  const required = schemaRequiredSet(schema);
+  return Object.entries(schema.properties || {}).map(([fieldName, property]) => ({
+    name: fieldName,
+    title: property.title || humanizeTechnicalKey(fieldName),
+    type: schemaPropertyType(property),
+    item_type: schemaArrayItemType(property),
+    required: required.has(fieldName),
+    description: property.description || '',
+    minLength: property.minLength ?? '',
+    minimum: property.minimum ?? '',
+    maximum: property.maximum ?? '',
+  }));
+}
+
+function operationSchemaIsSimple(schema = {}) {
+  if (!schema || schema.type !== 'object' || !schema.properties) {
+    return schema?.type === 'object' || !Object.keys(schema || {}).length;
+  }
+  return Object.values(schema.properties || {}).every((property) => {
+    if (property.anyOf || property.oneOf || property.allOf || property.$ref) return false;
+    const type = schemaPropertyType(property);
+    if (!operationContractTypes.includes(type)) return false;
+    if (type === 'array') {
+      return !property.items?.anyOf && !property.items?.oneOf && !property.items?.allOf && !property.items?.$ref;
+    }
+    return true;
+  });
+}
+
+function operationSchemaEmpty(kind) {
+  return `<div class="empty" data-operation-schema-empty>${kind === 'request' ? 'Входные параметры не настроены.' : 'Поля ответа не настроены.'}</div>`;
+}
+
+function renderOperationSchemaFieldRow(kind, field = {}) {
+  const current = {
+    name: '',
+    title: '',
+    type: 'string',
+    item_type: 'object',
+    required: false,
+    description: '',
+    minLength: '',
+    minimum: '',
+    maximum: '',
+    ...field,
+  };
+  return `
+    <div class="contract-field-row" data-operation-field-row data-schema-kind="${escapeHtml(kind)}">
+      <div class="grid two">
+        <label>Имя поля
+          <input data-operation-contract-control data-operation-field-name value="${escapeHtml(current.name)}" autocomplete="off" placeholder="${kind === 'request' ? 'login' : 'message'}">
+          <span class="field-help">Техническое имя параметра в payload endpoint. Используйте латиницу, цифры и подчеркивание.</span>
+        </label>
+        <label>Название
+          <input data-operation-contract-control data-operation-field-title value="${escapeHtml(current.title)}" autocomplete="off">
+          <span class="field-help">Понятное название для администратора. В JSON попадет как title.</span>
+        </label>
+        <label>Тип
+          <select data-operation-contract-control data-operation-field-type>${optionList(operationContractTypes, current.type, operationContractTypeLabels)}</select>
+          <span class="field-help">Тип проверяется при сохранении mock-ответа и JSON Schema.</span>
+        </label>
+        <label>Обязательное
+          <select data-operation-contract-control data-operation-field-required>${booleanOptions(current.required)}</select>
+          <span class="field-help">Поле попадет в required выбранной JSON Schema.</span>
+        </label>
+      </div>
+      <label>Описание
+        <textarea data-operation-contract-control data-operation-field-description rows="2">${escapeHtml(current.description)}</textarea>
+      </label>
+      <details class="slot-schema-derived">
+        <summary>Дополнительные ограничения</summary>
+        <div class="grid three">
+          <label>Тип элемента массива
+            <select data-operation-contract-control data-operation-field-item-type>${optionList(operationArrayItemTypes, current.item_type, operationContractTypeLabels)}</select>
+          </label>
+          <label>Минимальная длина строки
+            <input data-operation-contract-control data-operation-field-min-length type="number" min="0" value="${escapeHtml(current.minLength)}">
+          </label>
+          <label>Минимум числа
+            <input data-operation-contract-control data-operation-field-minimum type="number" value="${escapeHtml(current.minimum)}">
+          </label>
+          <label>Максимум числа
+            <input data-operation-contract-control data-operation-field-maximum type="number" value="${escapeHtml(current.maximum)}">
+          </label>
+        </div>
+      </details>
+      <button class="danger" type="button" data-action="endpoint-${kind}-field-remove">Удалить поле</button>
+    </div>
+  `;
+}
+
+function renderOperationSchemaEditor(kind, title, schema = {}) {
+  const fields = operationSchemaFields(schema);
+  const rows = fields.length
+    ? fields.map((field) => renderOperationSchemaFieldRow(kind, field)).join('')
+    : operationSchemaEmpty(kind);
+  const warning = operationSchemaIsSimple(schema)
+    ? ''
+    : '<div class="empty">Контракт содержит сложную JSON Schema. UI покажет поддерживаемую часть; для сложной схемы используйте JSON контрольную точку.</div>';
+  return `
+    <fieldset class="launch-editor" data-operation-schema-editor="${escapeHtml(kind)}">
+      <legend>${escapeHtml(title)}</legend>
+      <div class="meta">${kind === 'request'
+        ? 'Параметры, которые adapter получает на входе операции.'
+        : 'Поля, которые endpoint возвращает после выполнения операции.'}</div>
+      ${warning}
+      <div class="contract-field-list" data-operation-schema-rows>${rows}</div>
+      <button type="button" data-action="endpoint-${kind}-field-add">Добавить поле</button>
+    </fieldset>
+  `;
+}
+
+function mockInputValue(value) {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'object') return jsonPretty(value);
+  return String(value);
+}
+
+function renderOperationMockRow(field, mockOutput = {}) {
+  const value = mockOutput?.[field.name];
+  const commonAttrs = `data-operation-mock-control data-mock-field-value data-mock-field-name="${escapeHtml(field.name)}" data-mock-field-type="${escapeHtml(field.type)}" data-mock-field-required="${field.required ? 'true' : 'false'}"`;
+  let control = '';
+  if (field.type === 'boolean') {
+    const selected = value === true ? 'true' : value === false ? 'false' : '';
+    control = `
+      <select ${commonAttrs}>
+        <option value="" ${selected === '' ? 'selected' : ''}>не заполнено</option>
+        <option value="true" ${selected === 'true' ? 'selected' : ''}>true</option>
+        <option value="false" ${selected === 'false' ? 'selected' : ''}>false</option>
+      </select>
+    `;
+  } else if (field.type === 'integer' || field.type === 'number') {
+    control = `<input ${commonAttrs} type="number" ${field.type === 'number' ? 'step="any"' : 'step="1"'} value="${escapeHtml(mockInputValue(value))}">`;
+  } else if (field.type === 'array' || field.type === 'object') {
+    control = `<textarea ${commonAttrs} rows="4" placeholder="${field.type === 'array' ? '[]' : '{}'}">${escapeHtml(mockInputValue(value))}</textarea>`;
+  } else {
+    control = `<input ${commonAttrs} value="${escapeHtml(mockInputValue(value))}" autocomplete="off">`;
+  }
+  return `
+    <div class="contract-field-row" data-operation-mock-row>
+      <div class="parameter-binding-meta">
+        <strong>${escapeHtml(field.title || field.name)}</strong>
+        <span>${escapeHtml(field.name)} · ${escapeHtml(operationContractTypeLabels[field.type] || field.type)}${field.required ? ' · обязательное' : ''}</span>
+      </div>
+      <label>Значение mock
+        ${control}
+        <span class="field-help">Значение будет включено в тестовый ответ mock_output и проверено по контракту ответа.</span>
+      </label>
+    </div>
+  `;
+}
+
+function renderOperationMockRows(responseSchema = {}, mockOutput = {}) {
+  const fields = operationSchemaFields(responseSchema);
+  if (!fields.length) {
+    return '<div class="empty">Добавьте поля ответа операции, чтобы заполнить тестовый ответ mock.</div>';
+  }
+  return fields.map((field) => renderOperationMockRow(field, mockOutput)).join('');
+}
+
+function renderOperationMockEditor(adapterType, responseSchema = {}, mockOutput = {}) {
+  if (adapterType !== 'mock') {
+    return '';
+  }
+  return `
+    <fieldset class="launch-editor" data-operation-mock-editor>
+      <legend>Тестовый ответ mock</legend>
+      <div class="meta">Форма строится из полей ответа операции. Обязательные поля должны быть заполнены.</div>
+      <div class="contract-field-list" data-operation-mock-rows>${renderOperationMockRows(responseSchema, mockOutput)}</div>
+    </fieldset>
+  `;
+}
+
+function renderOperationJsonCheckpoint(operation = {}, adapterType = 'mock') {
+  return `
+    <details class="slot-card" data-operation-json-checkpoint>
+      <summary class="slot-card-summary">
+        <div class="slot-card-summary-main">
+          <strong>JSON контрольная точка</strong>
+          <span>Итоговые request_schema, response_schema и mock_output для backend-валидации.</span>
+        </div>
+      </summary>
+      <div class="slot-card-body">
+        <label>JSON входа
+          <textarea name="operation_request_schema" data-operation-json-kind="request" rows="7">${escapeHtml(jsonPretty(operation.request_schema || defaultOperationRequestSchema()))}</textarea>
+        </label>
+        <label>JSON ответа
+          <textarea name="operation_response_schema" data-operation-json-kind="response" rows="7">${escapeHtml(jsonPretty(operation.response_schema || defaultOperationResponseSchema()))}</textarea>
+        </label>
+        <label>JSON тестового ответа${adapterType === 'mock' ? ' mock' : ''}
+          <textarea name="operation_mock_output" data-operation-json-kind="mock" rows="5">${operation.mock_output ? escapeHtml(jsonPretty(operation.mock_output)) : ''}</textarea>
+        </label>
+        <button type="button" data-action="endpoint-operation-json-apply">Применить JSON в форму</button>
+      </div>
+    </details>
+  `;
+}
+
+function renderEndpointOperationCard({ endpointId, adapterType = 'mock', operationId, operation = {}, tools = [], workflows = [], open = false }) {
   const usage = integrationOperationUsage(endpointId, operationId, tools, workflows);
+  const deleteReason = operationDeleteDisabledReason(usage);
+  const requestSchema = operation.request_schema || defaultOperationRequestSchema();
+  const responseSchema = operation.response_schema || defaultOperationResponseSchema();
   return `
     <details class="slot-card" data-endpoint-operation-card${open ? ' open' : ''}>
       <summary class="slot-card-summary">
         <div class="slot-card-summary-main">
           <strong>${escapeHtml(operation.display_name || operationId || 'Новая операция')}</strong>
-          <span>${escapeHtml(operationId || 'operation_id')} · ${escapeHtml(operation.method || 'POST')} ${escapeHtml(operation.path || '')}</span>
+          <span>${escapeHtml(operationId || 'operation_id')} · ${escapeHtml(operation.method || 'POST')} ${escapeHtml(operation.path || '')}${usage.length ? ` · используется: ${escapeHtml(usage.join('; '))}` : ''}</span>
         </div>
-        <button class="danger slot-delete-button" type="button" data-action="endpoint-operation-remove" ${usage.length ? 'disabled' : ''}>Удалить</button>
+        <button class="danger slot-delete-button" type="button" data-action="endpoint-operation-remove" title="${escapeHtml(deleteReason)}" ${usage.length ? 'disabled' : ''}>Удалить</button>
       </summary>
       <div class="slot-card-body">
         <div class="grid two">
@@ -3367,14 +5085,13 @@ function renderEndpointOperationCard({ endpointId, operationId, operation = {}, 
           <label>Метод<select name="operation_method">${optionList(['GET', 'POST'], operation.method || 'POST')}</select></label>
           <label>Путь webhook или topic<input name="operation_path" value="${escapeHtml(operation.path || '')}" autocomplete="off"></label>
           <label>Timeout, сек<input name="operation_timeout_seconds" type="number" min="1" max="120" value="${escapeHtml(operation.timeout_seconds || 10)}"></label>
+          <label>Версия контракта<input name="operation_contract_version" value="${escapeHtml(operation.contract_version || '1.0')}" autocomplete="off"></label>
+          <label>Статус контракта<select name="operation_contract_status">${optionList(['draft', 'valid', 'broken', 'deprecated'], operation.contract_status || 'valid')}</select></label>
         </div>
-        <label>Вход операции, JSON Schema
-          <textarea name="operation_request_schema" rows="7">${escapeHtml(jsonPretty(operation.request_schema || defaultOperationRequestSchema()))}</textarea>
-          <span class="field-help">Технический payload, который получит adapter. Эти параметры не редактируются в сценарии.</span>
-        </label>
-        <label>Тестовый ответ операции
-          <textarea name="operation_mock_output" rows="5">${operation.mock_output ? escapeHtml(jsonPretty(operation.mock_output)) : ''}</textarea>
-        </label>
+        ${renderOperationSchemaEditor('request', 'Входные параметры операции', requestSchema)}
+        ${renderOperationSchemaEditor('response', 'Поля ответа операции', responseSchema)}
+        ${renderOperationMockEditor(adapterType, responseSchema, operation.mock_output || {})}
+        ${renderOperationJsonCheckpoint(operation, adapterType)}
         ${usageListPanel('Где используется операция', usage, 'Не используется. Операцию можно удалить.')}
       </div>
     </details>
@@ -3396,6 +5113,8 @@ function toolCreateTemplate(source, tools, endpoints) {
       type: 'object',
       additionalProperties: true,
     },
+    contract_version: '1.0',
+    contract_status: 'draft',
     policy: template.policy || {
       default_timeout_seconds: 10,
       retry: {
@@ -3409,12 +5128,12 @@ function toolCreateTemplate(source, tools, endpoints) {
   };
 }
 
-function renderToolCatalogEditor({ tool, tools, matrices, resolutionProfiles, channels }) {
+function renderToolCatalogEditor({ tool, tools, matrices, resolutionProfiles, slotAutofillProfiles = [], channels }) {
   if (state.toolCatalogOperation === 'delete') {
     if (!tool?.tool_name) {
       return '<div class="empty">Нет выбранного ReAct-вызова ИИ для удаления</div>';
     }
-    const usage = toolUsage(tool.tool_name, matrices, resolutionProfiles, channels);
+    const usage = toolUsage(tool.tool_name, matrices, resolutionProfiles, channels, slotAutofillProfiles);
     return `
       <form class="scenario-editor panel" data-form="tool-catalog-delete">
         <div>
@@ -3442,6 +5161,8 @@ function renderToolCatalogEditor({ tool, tools, matrices, resolutionProfiles, ch
           <span class="field-help">Стабильное имя вызова, который может выбрать ИИ в ReAct-loop. Используется в матрице запуска, профилях разрешения и аудите.</span>
         </label>
         <label>Тип действия<select name="action_type">${optionList(['read_only', 'action'], current.action_type)}</select></label>
+        <label>Версия контракта<input name="contract_version" value="${escapeHtml(current.contract_version || '1.0')}" autocomplete="off"></label>
+        <label>Статус контракта<select name="contract_status">${optionList(['draft', 'valid', 'broken', 'deprecated'], current.contract_status || 'valid')}</select></label>
       </div>
       <label>Описание<textarea name="description" rows="3">${escapeHtml(current.description || '')}</textarea></label>
       <fieldset class="launch-editor">
@@ -3460,7 +5181,7 @@ function renderToolCatalogEditor({ tool, tools, matrices, resolutionProfiles, ch
         <label>JSON Schema параметров<textarea name="parameters_schema" rows="8">${escapeHtml(jsonPretty(current.parameters_schema || { type: 'object', additionalProperties: true }))}</textarea></label>
         <label>JSON Schema результата<textarea name="result_schema" rows="8">${escapeHtml(jsonPretty(current.result_schema || { type: 'object', additionalProperties: true }))}</textarea></label>
       </fieldset>
-      ${usageListPanel('Где используется', toolUsage(current.tool_name, matrices, resolutionProfiles, channels), 'Не используется. ReAct-вызов ИИ можно удалить.')}
+      ${usageListPanel('Где используется', toolUsage(current.tool_name, matrices, resolutionProfiles, channels, slotAutofillProfiles), 'Не используется. ReAct-вызов ИИ можно удалить.')}
       <div class="scenario-editor-actions">
         <button class="primary" type="submit">${state.toolCatalogOperation === 'create' ? 'Создать ReAct-вызов ИИ' : 'Сохранить ReAct-вызов ИИ'}</button>
       </div>
@@ -3472,12 +5193,7 @@ function selectedOperationBinding(tool) {
   return currentToolBinding(tool);
 }
 
-function renderOperationBindingEditor({ tool, endpoints, matrices, resolutionProfiles, channels }) {
-  if (!tool?.tool_name) {
-    return '<div class="empty">ReAct-вызов ИИ не выбран</div>';
-  }
-  const currentBinding = selectedOperationBinding(tool);
-  const usage = toolUsage(tool.tool_name, matrices, resolutionProfiles, channels);
+function operationBindingTarget(endpoints, currentBinding = null) {
   const selectedEndpoint = endpoints.find((endpoint) => endpoint.endpoint_id === state.operationBindingEndpointId)
     || endpointForBinding(currentBinding, endpoints)
     || endpoints[0]
@@ -3491,16 +5207,30 @@ function renderOperationBindingEditor({ tool, endpoints, matrices, resolutionPro
         ? currentBinding.operation_id
         : selectedOperationIds[0] || ''
     );
-  const selectedOperation = selectedEndpoint?.operations?.[selectedOperationId] || {};
-  const mappingBinding = currentBinding
-    && currentBinding.endpoint_id === selectedEndpointId
-    && currentBinding.operation_id === selectedOperationId
-    ? currentBinding
-    : {
-      endpoint_id: selectedEndpointId,
-      operation_id: selectedOperationId,
-      parameter_mapping: defaultOperationParameterMapping(tool, selectedOperation),
-    };
+  return {
+    selectedEndpoint,
+    selectedEndpointId,
+    selectedOperationId,
+    selectedOperation: selectedEndpoint?.operations?.[selectedOperationId] || {},
+  };
+}
+
+function renderOperationBindingEditor({ tool, endpoints, matrices, resolutionProfiles, slotAutofillProfiles = [], channels }) {
+  if (!tool?.tool_name) {
+    return '<div class="empty">ReAct-вызов ИИ не выбран</div>';
+  }
+  const currentBinding = selectedOperationBinding(tool);
+  const usage = toolUsage(tool.tool_name, matrices, resolutionProfiles, channels, slotAutofillProfiles);
+  const {
+    selectedEndpoint,
+    selectedEndpointId,
+    selectedOperationId,
+    selectedOperation,
+  } = operationBindingTarget(endpoints, currentBinding);
+  const bindingModel = operationBindingEditorModel(tool, selectedOperation, currentBinding, selectedEndpointId, selectedOperationId);
+  const compatibility = operationBindingCompatibility(bindingModel.tool, selectedOperation, bindingModel.binding);
+  const unbindReason = operationBindingUnbindDisabledReason(currentBinding, usage);
+  const unbindDisabled = !currentBinding || usage.length;
   return `
     <form class="scenario-editor panel" data-form="operation-binding-editor">
       <div class="slot-schema-derived">
@@ -3520,14 +5250,132 @@ function renderOperationBindingEditor({ tool, endpoints, matrices, resolutionPro
         </label>
       </div>
       <fieldset class="launch-editor">
-        <legend>Маппинг payload операции</legend>
-        <div class="meta">Здесь технические параметры операции связываются с параметрами вызова, константами или секретами. Сценарии используют только параметры вызова.</div>
-        ${renderOperationParameterMappingEditor(tool, selectedOperation, mappingBinding)}
+        <legend>Входные параметры endpoint</legend>
+        <div class="meta">Здесь выбирается, какие параметры endpoint-операции видит ReAct-вызов. Слоты сценария сюда не подставляются: они заполняют параметры ReAct в матрице запуска или профиле разрешения атрибута.</div>
+        ${renderOperationParameterVisibilityEditor(bindingModel.tool, selectedOperation, bindingModel.binding)}
       </fieldset>
+      <fieldset class="launch-editor">
+        <legend>Поля ответа, доступные ReAct</legend>
+        <div class="meta">Можно вернуть в ReAct-результат любой набор полей endpoint-ответа и задать для них понятные имена.</div>
+        ${renderOperationResultVisibilityEditor(bindingModel.tool, selectedOperation, bindingModel.binding)}
+      </fieldset>
+      ${operationBindingCompatibilityPanel(compatibility)}
       ${usageListPanel('Где используется ReAct-вызов ИИ', usage, 'Не используется. Привязку можно отвязать.')}
+      <div class="field-help">${escapeHtml(unbindReason)}</div>
       <div class="scenario-editor-actions">
         <button class="primary" type="submit" name="operation_binding_action" value="bind" ${!selectedEndpointId || !selectedOperationId ? 'disabled' : ''}>Привязать</button>
-        <button class="danger" type="submit" name="operation_binding_action" value="unbind" ${!currentBinding || usage.length ? 'disabled' : ''}>Отвязать</button>
+        <button class="danger" type="submit" name="operation_binding_action" value="unbind" title="${escapeHtml(unbindReason)}" ${unbindDisabled ? 'disabled' : ''}>Отвязать</button>
+      </div>
+    </form>
+  `;
+}
+
+function defaultReactCallNameForOperation(operationId, tools) {
+  const existing = new Set((tools || []).map((tool) => tool.tool_name));
+  const base = String(operationId || 'custom_react_call')
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]+/g, '_')
+    .replace(/^_+/, '')
+    || 'custom_react_call';
+  if (!existing.has(base)) {
+    return base;
+  }
+  let candidate = `${base}_copy`;
+  let index = 2;
+  while (existing.has(candidate)) {
+    candidate = `${base}_copy_${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+function defaultReactCallDescription(operationId, operation = {}) {
+  const label = operation.display_name || operationId || 'endpoint-операция';
+  return operation.description || `ReAct-вызов ИИ для операции "${label}".`;
+}
+
+function defaultOperationBindingPolicy(actionType, operation = {}) {
+  const readOnly = actionType === 'read_only';
+  return {
+    default_timeout_seconds: Number(operation.timeout_seconds || 10),
+    retry: {
+      max_attempts: 1,
+      backoff_seconds: 0,
+    },
+    approval_required_hint: !readOnly,
+    auto_execution_eligible: readOnly,
+    max_risk_level: readOnly ? 'low' : 'medium',
+  };
+}
+
+function createReactCallTemplateFromOperation({ toolName, actionType, description, operation }) {
+  return {
+    tool_name: toolName,
+    action_type: actionType,
+    description,
+    endpoint_bindings: [],
+    parameters_schema: operationObjectSchema({}, []),
+    result_schema: operationObjectSchema({}, []),
+    contract_version: operation.contract_version || '1.0',
+    contract_status: operation.contract_status || 'draft',
+    policy: defaultOperationBindingPolicy(actionType, operation),
+  };
+}
+
+function renderOperationBindingCreateEditor({ tools, endpoints }) {
+  const {
+    selectedEndpoint,
+    selectedEndpointId,
+    selectedOperationId,
+    selectedOperation,
+  } = operationBindingTarget(endpoints, null);
+  const toolName = defaultReactCallNameForOperation(selectedOperationId, tools);
+  const actionType = 'read_only';
+  const templateTool = createReactCallTemplateFromOperation({
+    toolName,
+    actionType,
+    description: defaultReactCallDescription(selectedOperationId, selectedOperation),
+    operation: selectedOperation,
+  });
+  const bindingModel = operationBindingEditorModel(templateTool, selectedOperation, null, selectedEndpointId, selectedOperationId);
+  const compatibility = operationBindingCompatibility(bindingModel.tool, selectedOperation, bindingModel.binding);
+  return `
+    <form class="scenario-editor panel" data-form="operation-binding-create-editor">
+      <div class="slot-schema-derived">
+        <div class="metric-label">Новый ReAct-вызов ИИ</div>
+        <div class="meta">Создайте ReAct-вызов прямо из endpoint-операции. Имена параметров и полей результата ниже будут автоматически записаны в контракт ReAct.</div>
+      </div>
+      <div class="grid two">
+        <label>Подключение
+          <select name="binding_endpoint_id" data-operation-binding-endpoint>${endpointOptions(endpoints, selectedEndpointId)}</select>
+        </label>
+        <label>Операция
+          <select name="binding_operation_id" data-operation-binding-operation>${operationOptionsForEndpoint(selectedEndpoint, selectedOperationId)}</select>
+        </label>
+        <label>Техническое имя ReAct-вызова
+          <input name="tool_name" value="${escapeHtml(toolName)}" autocomplete="off">
+          <span class="field-help">По умолчанию берется имя endpoint-операции. Если такое имя уже занято, добавляется суффикс.</span>
+        </label>
+        <label>Тип действия
+          <select name="action_type">${optionList(['read_only', 'action'], actionType)}</select>
+        </label>
+      </div>
+      <label>Описание
+        <textarea name="description" rows="3">${escapeHtml(defaultReactCallDescription(selectedOperationId, selectedOperation))}</textarea>
+      </label>
+      <fieldset class="launch-editor">
+        <legend>Входные параметры endpoint</legend>
+        <div class="meta">Отметьте, какие endpoint-параметры будут параметрами нового ReAct-вызова. Константы и секреты попадут только в технический payload.</div>
+        ${renderOperationParameterVisibilityEditor(bindingModel.tool, selectedOperation, bindingModel.binding)}
+      </fieldset>
+      <fieldset class="launch-editor">
+        <legend>Поля ответа, доступные ReAct</legend>
+        <div class="meta">Выберите поля endpoint-ответа, которые должен возвращать новый ReAct-вызов.</div>
+        ${renderOperationResultVisibilityEditor(bindingModel.tool, selectedOperation, bindingModel.binding)}
+      </fieldset>
+      ${operationBindingCompatibilityPanel(compatibility)}
+      <div class="scenario-editor-actions">
+        <button class="primary" type="submit" ${!selectedEndpointId || !selectedOperationId ? 'disabled' : ''}>Создать и привязать</button>
       </div>
     </form>
   `;
@@ -3569,82 +5417,170 @@ function reactParameterNames(tool = {}) {
   ]));
 }
 
-function defaultOperationParameterMapping(tool = {}, operation = {}) {
-  const reactNames = new Set(reactParameterNames(tool));
+function reactResultFieldNames(tool = {}) {
+  return Array.from(new Set([
+    ...schemaRequired(tool.result_schema || {}),
+    ...Object.keys(schemaProperties(tool.result_schema || {})),
+  ]));
+}
+
+function operationResponseFieldNames(operation = {}, resultMapping = {}) {
+  const schema = operation.response_schema || defaultOperationResponseSchema();
+  return Array.from(new Set([
+    ...schemaRequired(schema),
+    ...Object.keys(schemaProperties(schema)),
+    ...Object.values(resultMapping || {}).filter(Boolean),
+  ]));
+}
+
+function defaultVisibleParameterMapping(operation = {}) {
   const result = {};
   for (const parameterName of operationParameterNames(operation, {})) {
-    if (reactNames.has(parameterName)) {
-      result[parameterName] = `react:${parameterName}`;
-    }
+    result[parameterName] = `react:${parameterName}`;
   }
   return result;
 }
 
-function operationMappingSourceOptions(selected) {
+function defaultVisibleResultMapping(operation = {}) {
+  const result = {};
+  for (const fieldName of operationResponseFieldNames(operation, {})) {
+    result[fieldName] = fieldName;
+  }
+  return result;
+}
+
+function operationObjectSchema(properties, requiredNames = []) {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties,
+    required: Array.from(new Set(requiredNames)).filter(Boolean),
+  };
+}
+
+function schemaPropertyForName(schema = {}, name, fallbackTitle = '') {
+  const property = schemaProperties(schema)[name];
+  if (property) {
+    return cloneJson(property);
+  }
+  return {
+    type: 'string',
+    title: fallbackTitle || humanizeTechnicalKey(name),
+  };
+}
+
+function visibleContractFromBinding(operation = {}, binding = {}) {
+  const parameterProperties = {};
+  const parameterRequired = [];
+  const requestSchema = operation.request_schema || defaultOperationRequestSchema();
+  const requestRequired = new Set(schemaRequired(requestSchema));
+  for (const [endpointParameter, sourceRef] of Object.entries(binding.parameter_mapping || {})) {
+    const parsed = parseBindingString(sourceRef);
+    if (parsed.source !== 'react' || !parsed.value) continue;
+    parameterProperties[parsed.value] = schemaPropertyForName(requestSchema, endpointParameter, parsed.value);
+    if (requestRequired.has(endpointParameter)) {
+      parameterRequired.push(parsed.value);
+    }
+  }
+
+  const resultProperties = {};
+  const resultRequired = [];
+  const responseSchema = operation.response_schema || defaultOperationResponseSchema();
+  const responseRequired = new Set(schemaRequired(responseSchema));
+  for (const [reactField, endpointPath] of Object.entries(binding.result_mapping || {})) {
+    resultProperties[reactField] = schemaPropertyForName(responseSchema, endpointPath, reactField);
+    if (responseRequired.has(endpointPath)) {
+      resultRequired.push(reactField);
+    }
+  }
+
+  return {
+    parameters_schema: operationObjectSchema(parameterProperties, parameterRequired),
+    result_schema: operationObjectSchema(resultProperties, resultRequired),
+  };
+}
+
+function operationBindingEditorModel(tool, operation, currentBinding, endpointId, operationId) {
+  const currentSelected = currentBinding
+    && currentBinding.endpoint_id === endpointId
+    && currentBinding.operation_id === operationId;
+  if (currentSelected) {
+    return {
+      tool,
+      binding: currentBinding,
+    };
+  }
+  const binding = {
+    endpoint_id: endpointId,
+    operation_id: operationId,
+    parameter_mapping: defaultVisibleParameterMapping(operation),
+    result_mapping: defaultVisibleResultMapping(operation),
+  };
+  return {
+    tool: {
+      ...tool,
+      ...visibleContractFromBinding(operation, binding),
+    },
+    binding,
+  };
+}
+
+function operationMappingSourceOptions(selected, endpointRequired = false) {
   return [
-    `<option value="" ${!selected ? 'selected' : ''}>не задано</option>`,
+    `<option value="" ${!selected ? 'selected' : ''}>${endpointRequired ? 'не задано' : 'не использовать'}</option>`,
     ...['react', 'constant', 'secret'].map(
       (value) => `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(visibleLabels[value] || value)}</option>`,
     ),
   ].join('');
 }
 
-function reactParameterOptions(tool, selected) {
-  const names = reactParameterNames(tool);
-  if (!names.length) {
-    return '<option value="">Нет параметров вызова</option>';
-  }
-  return [
-    `<option value="" ${!selected ? 'selected' : ''}>выберите параметр</option>`,
-    ...names.map((name) => `<option value="${escapeHtml(name)}" ${name === selected ? 'selected' : ''}>${escapeHtml(name)}</option>`),
-  ].join('');
-}
-
-function renderOperationParameterMappingRow(parameterName, sourceRef, tool, operation, rowIndex) {
+function renderOperationParameterVisibilityRow(parameterName, sourceRef, tool, operation, rowIndex) {
   const parsed = parseBindingString(sourceRef);
   const source = parsed.source || '';
   const value = parsed.value || '';
-  const schema = schemaProperties(operation.request_schema || {})[parameterName] || null;
-  const required = schemaRequired(operation.request_schema || {}).includes(parameterName);
+  const requestSchema = operation.request_schema || defaultOperationRequestSchema();
+  const schema = schemaProperties(requestSchema)[parameterName] || null;
+  const endpointRequired = schemaRequired(requestSchema).includes(parameterName);
+  const reactRequired = source === 'react'
+    ? schemaRequired(tool.parameters_schema || {}).includes(value)
+    : endpointRequired;
   return `
-    <div class="parameter-binding-row" data-operation-param-row data-required="${required ? 'true' : 'false'}">
+    <div class="contract-field-row operation-contract-row" data-operation-param-row data-required="${endpointRequired ? 'true' : 'false'}">
       <input type="hidden" value="${escapeHtml(parameterName)}" data-operation-param-name>
       <div class="parameter-binding-meta">
         <strong>${escapeHtml(schemaDisplayName(parameterName, schema))}</strong>
-        <span>${escapeHtml(schemaMetaLine(parameterName, schema, required, ' параметр операции'))}</span>
+        <span>${escapeHtml(schemaMetaLine(parameterName, schema, endpointRequired, ' параметр endpoint'))}</span>
       </div>
-      <label>Заполняется из
-        <select data-operation-param-source name="operation_mapping_source_${rowIndex}">${operationMappingSourceOptions(source)}</select>
-      </label>
-      <label data-operation-param-react-wrap ${source === 'react' ? '' : 'hidden'}>Параметр вызова
-        <select data-operation-param-react name="operation_mapping_react_${rowIndex}">${reactParameterOptions(tool, value)}</select>
-      </label>
-      <label data-operation-param-value-wrap ${source && source !== 'react' ? '' : 'hidden'}>Параметр или значение
-        <input data-operation-param-value name="operation_mapping_value_${rowIndex}" value="${source === 'react' ? '' : escapeHtml(value)}" autocomplete="off" placeholder="${source === 'secret' ? 'ENV_NAME' : 'значение'}">
-      </label>
+      <div class="grid three">
+        <label>Источник значения
+          <select data-operation-param-source name="operation_mapping_source_${rowIndex}">${operationMappingSourceOptions(source, endpointRequired)}</select>
+        </label>
+        <label data-operation-param-react-wrap ${source === 'react' ? '' : 'hidden'}>Имя параметра ReAct
+          <input data-operation-param-react name="operation_mapping_react_${rowIndex}" value="${source === 'react' ? escapeHtml(value || parameterName) : escapeHtml(parameterName)}" autocomplete="off">
+          <span class="field-help">Это имя увидит оркестратор. Слоты сценария настраиваются в матрице запуска или профиле разрешения атрибута.</span>
+        </label>
+        <label data-operation-param-react-wrap ${source === 'react' ? '' : 'hidden'}>Обязателен для ReAct
+          <select data-operation-param-react-required name="operation_mapping_react_required_${rowIndex}">${booleanOptions(reactRequired)}</select>
+        </label>
+        <label data-operation-param-value-wrap ${source && source !== 'react' ? '' : 'hidden'}>Параметр или значение
+          <input data-operation-param-value name="operation_mapping_value_${rowIndex}" value="${source && source !== 'react' ? escapeHtml(value) : ''}" autocomplete="off" placeholder="${source === 'secret' ? 'ENV_NAME' : 'значение'}">
+        </label>
+      </div>
     </div>
   `;
 }
 
-function renderOperationParameterMappingEditor(tool, operation, binding) {
-  const mapping = {
-    ...defaultOperationParameterMapping(tool, operation),
-    ...(binding?.parameter_mapping || {}),
-  };
+function renderOperationParameterVisibilityEditor(tool, operation, binding) {
+  const mapping = binding?.parameter_mapping || {};
   const names = operationParameterNames(operation, mapping);
   if (!names.length) {
-    return '<div class="empty" data-operation-param-mapping>У операции нет описанных входных параметров.</div>';
+    return '<div class="empty" data-operation-param-mapping>У endpoint-операции нет описанных входных параметров.</div>';
   }
   const missingRequired = schemaRequired(operation.request_schema || {})
     .filter((parameterName) => !mapping[parameterName]);
   return `
-    <div class="parameter-binding-list" data-operation-param-mapping>
-      <div class="parameter-binding-header">
-        <span>Параметр endpoint-операции</span>
-        <span>Заполняется из</span>
-        <span>Параметр или значение</span>
-      </div>
-      ${names.map((name, index) => renderOperationParameterMappingRow(
+    <div class="operation-contract-list" data-operation-param-mapping>
+      ${names.map((name, index) => renderOperationParameterVisibilityRow(
         name,
         mapping[name] || '',
         tool,
@@ -3652,13 +5588,124 @@ function renderOperationParameterMappingEditor(tool, operation, binding) {
         index,
       )).join('')}
       ${missingRequired.length
-        ? `<div class="field-help">Не заполнены обязательные параметры операции: ${escapeHtml(missingRequired.join(', '))}</div>`
+        ? `<div class="field-help">Не заполнены обязательные параметры endpoint: ${escapeHtml(missingRequired.join(', '))}</div>`
         : ''}
     </div>
   `;
 }
 
-function toolUsage(toolName, matrices, resolutionProfiles, channels) {
+function resultMappingByEndpointField(resultMapping = {}) {
+  const result = {};
+  for (const [reactField, endpointPath] of Object.entries(resultMapping || {})) {
+    if (!result[endpointPath]) {
+      result[endpointPath] = reactField;
+    }
+  }
+  return result;
+}
+
+function renderOperationResultVisibilityRow(endpointFieldName, reactFieldName, tool, operation, rowIndex) {
+  const responseSchema = operation.response_schema || defaultOperationResponseSchema();
+  const schema = schemaProperties(responseSchema)[endpointFieldName] || null;
+  const endpointRequired = schemaRequired(responseSchema).includes(endpointFieldName);
+  const included = Boolean(reactFieldName);
+  const reactRequired = included
+    ? schemaRequired(tool.result_schema || {}).includes(reactFieldName)
+    : endpointRequired;
+  return `
+    <div class="contract-field-row operation-contract-row" data-operation-result-row>
+      <input type="hidden" value="${escapeHtml(endpointFieldName)}" data-operation-response-field-name>
+      <div class="parameter-binding-meta">
+        <strong>${escapeHtml(schemaDisplayName(endpointFieldName, schema))}</strong>
+        <span>${escapeHtml(schemaMetaLine(endpointFieldName, schema, endpointRequired, ' поле endpoint-ответа'))}</span>
+      </div>
+      <div class="grid three">
+        <label>Вернуть в ReAct
+          <select data-operation-result-include name="operation_result_include_${rowIndex}">${booleanOptions(included)}</select>
+        </label>
+        <label data-operation-result-react-wrap ${included ? '' : 'hidden'}>Имя поля результата ReAct
+          <input data-operation-result-name name="operation_result_name_${rowIndex}" value="${escapeHtml(reactFieldName || endpointFieldName)}" autocomplete="off">
+        </label>
+        <label data-operation-result-react-wrap ${included ? '' : 'hidden'}>Обязательное поле результата
+          <select data-operation-result-required name="operation_result_required_${rowIndex}">${booleanOptions(reactRequired)}</select>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function renderOperationResultVisibilityEditor(tool, operation, binding) {
+  const endpointToReact = resultMappingByEndpointField(binding?.result_mapping || {});
+  const names = operationResponseFieldNames(operation, binding?.result_mapping || {});
+  if (!names.length) {
+    return '<div class="empty" data-operation-result-mapping>У endpoint-операции нет описанных полей ответа.</div>';
+  }
+  return `
+    <div class="operation-contract-list" data-operation-result-mapping>
+      ${names.map((name, index) => renderOperationResultVisibilityRow(
+        name,
+        endpointToReact[name] || '',
+        tool,
+        operation,
+        index,
+      )).join('')}
+    </div>
+  `;
+}
+
+function operationBindingCompatibility(tool, operation, binding) {
+  const errors = [];
+  const parameterMapping = binding?.parameter_mapping || {};
+  const resultMapping = binding?.result_mapping || {};
+  const reactParameters = new Set(reactParameterNames(tool));
+  const endpointParameters = new Set(operationParameterNames(operation, parameterMapping));
+  for (const required of schemaRequired(operation.request_schema || {})) {
+    if (!parameterMapping[required]) {
+      errors.push(`не заполнен обязательный параметр endpoint: ${required}`);
+    }
+  }
+  for (const [endpointParameter, sourceRef] of Object.entries(parameterMapping)) {
+    if (!endpointParameters.has(endpointParameter)) {
+      errors.push(`маппинг ссылается на неизвестный параметр endpoint: ${endpointParameter}`);
+    }
+    const parsed = parseBindingString(sourceRef);
+    if (parsed.source === 'react' && !reactParameters.has(parsed.value)) {
+      errors.push(`маппинг параметра ${endpointParameter} ссылается на неизвестный параметр ReAct: ${parsed.value}`);
+    }
+  }
+  const reactResultFields = new Set(reactResultFieldNames(tool));
+  const endpointResponseFields = new Set(operationResponseFieldNames(operation, resultMapping));
+  for (const required of schemaRequired(tool.result_schema || {})) {
+    if (!resultMapping[required]) {
+      errors.push(`не заполнено обязательное поле результата ReAct: ${required}`);
+    }
+  }
+  for (const [reactField, endpointPath] of Object.entries(resultMapping)) {
+    if (!reactResultFields.has(reactField)) {
+      errors.push(`маппинг результата ссылается на неизвестное поле ReAct: ${reactField}`);
+    }
+    if (!endpointResponseFields.has(endpointPath)) {
+      errors.push(`маппинг результата ${reactField} ссылается на неизвестное поле endpoint: ${endpointPath}`);
+    }
+  }
+  return {
+    status: errors.length ? 'broken' : 'valid',
+    errors,
+  };
+}
+
+function operationBindingCompatibilityPanel(compatibility) {
+  const errors = compatibility.errors || [];
+  return `
+    <div class="slot-schema-derived">
+      <div class="metric-label">Совместимость контрактов</div>
+      <div class="meta">${badge(compatibility.status)} ${escapeHtml(errors.length ? 'Привязка требует исправления.' : 'ReAct-контракт и endpoint-контракт согласованы.')}</div>
+      ${errors.length ? `<ul class="usage-list">${errors.map((error) => `<li>${escapeHtml(error)}</li>`).join('')}</ul>` : ''}
+    </div>
+  `;
+}
+
+function toolUsage(toolName, matrices, resolutionProfiles, channels, slotAutofillProfiles = []) {
   const refs = [];
   for (const matrix of matrices || []) {
     for (const launch of matrix.launches || []) {
@@ -3668,9 +5715,13 @@ function toolUsage(toolName, matrices, resolutionProfiles, channels) {
     }
   }
   for (const profile of resolutionProfiles || []) {
-    const source = profile.candidate_source || {};
-    if (source.source_type === 'react_call' && source.tool_name === toolName) {
-      refs.push(`Профиль разрешения "${profile.display_name || profile.profile_id}", операция разрешения`);
+    if ((profile.enrichment_steps || []).some((step) => step.react_call === toolName)) {
+      refs.push(`Профиль разрешения "${profile.display_name || profile.profile_id}", обогащение контекста`);
+    }
+  }
+  for (const profile of slotAutofillProfiles || []) {
+    if (profile.react_call === toolName) {
+      refs.push(`Профиль автозаполнения "${profile.display_name || profile.profile_id}"`);
     }
   }
   for (const channel of channels || []) {
@@ -3683,7 +5734,17 @@ function toolUsage(toolName, matrices, resolutionProfiles, channels) {
   return refs;
 }
 
-function toolBindingUsage(toolName, endpointId, operationId, matrices, resolutionProfiles, channels) {
+function operationBindingUnbindDisabledReason(currentBinding, usage) {
+  if (!currentBinding) {
+    return 'У ReAct-вызова ИИ нет текущей привязки операции.';
+  }
+  if (usage?.length) {
+    return `Нельзя отвязать: сначала уберите связи: ${usage.join('; ')}.`;
+  }
+  return 'Привязку можно отвязать.';
+}
+
+function toolBindingUsage(toolName, endpointId, operationId, matrices, resolutionProfiles, channels, slotAutofillProfiles = []) {
   const refs = [];
   if (!toolName || !endpointId || !operationId) {
     return refs;
@@ -3700,14 +5761,13 @@ function toolBindingUsage(toolName, endpointId, operationId, matrices, resolutio
     }
   }
   for (const profile of resolutionProfiles || []) {
-    const source = profile.candidate_source || {};
-    if (
-      source.source_type === 'react_call'
-      && source.tool_name === toolName
-      && source.endpoint_id === endpointId
-      && source.operation_id === operationId
-    ) {
-      refs.push(`Профиль разрешения "${profile.display_name || profile.profile_id}", операция разрешения`);
+    if ((profile.enrichment_steps || []).some((step) => step.react_call === toolName)) {
+      refs.push(`Профиль разрешения "${profile.display_name || profile.profile_id}", обогащение контекста`);
+    }
+  }
+  for (const profile of slotAutofillProfiles || []) {
+    if (profile.react_call === toolName) {
+      refs.push(`Профиль автозаполнения "${profile.display_name || profile.profile_id}"`);
     }
   }
   for (const channel of channels || []) {
@@ -4202,12 +6262,13 @@ async function runEvaluation() {
 
 async function saveIntegrationEndpointForm(form) {
   const data = new FormData(form);
+  const adapterType = String(data.get('adapter_type') || '').trim();
   const endpoint = {
     endpoint_id: String(data.get('endpoint_id') || '').trim(),
-    adapter_type: String(data.get('adapter_type') || '').trim(),
+    adapter_type: adapterType,
     display_name: String(data.get('display_name') || '').trim(),
     enabled: parseBoolean(data.get('enabled')),
-    operations: parseEndpointOperationCards(form),
+    operations: parseEndpointOperationCards(form, adapterType),
   };
   const disabledReason = String(data.get('disabled_reason') || '').trim();
   const baseUrl = String(data.get('base_url') || '').trim();
@@ -4231,7 +6292,187 @@ async function deleteIntegrationEndpointForm() {
   await applyIntegrationEndpointMutation('delete', { endpoint_id: state.integrationEndpointId });
 }
 
-function parseEndpointOperationCards(form) {
+function rowText(row, selector) {
+  return row.querySelector(selector)?.value?.trim() || '';
+}
+
+function operationFieldRowHasManualInput(row) {
+  return [
+    '[data-operation-field-name]',
+    '[data-operation-field-title]',
+    '[data-operation-field-description]',
+    '[data-operation-field-min-length]',
+    '[data-operation-field-minimum]',
+    '[data-operation-field-maximum]',
+  ].some((selector) => rowText(row, selector));
+}
+
+function operationFieldFromRow(row, label) {
+  const name = rowText(row, '[data-operation-field-name]');
+  if (!name && !operationFieldRowHasManualInput(row)) {
+    return null;
+  }
+  if (!name) {
+    throw new Error(`${label}: имя поля не должно быть пустым.`);
+  }
+  if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(name)) {
+    throw new Error(`${label}: имя поля "${name}" должно начинаться с латинской буквы или подчеркивания.`);
+  }
+  return {
+    name,
+    title: rowText(row, '[data-operation-field-title]'),
+    type: rowText(row, '[data-operation-field-type]') || 'string',
+    item_type: rowText(row, '[data-operation-field-item-type]') || 'object',
+    required: parseBoolean(rowText(row, '[data-operation-field-required]')),
+    description: rowText(row, '[data-operation-field-description]'),
+    minLength: rowText(row, '[data-operation-field-min-length]'),
+    minimum: rowText(row, '[data-operation-field-minimum]'),
+    maximum: rowText(row, '[data-operation-field-maximum]'),
+  };
+}
+
+function operationSchemaPropertyFromField(field) {
+  const property = {};
+  if (field.type === 'array') {
+    property.type = 'array';
+    property.items = { type: field.item_type || 'object' };
+    if (property.items.type === 'object') {
+      property.items.additionalProperties = true;
+    }
+  } else if (field.type === 'object') {
+    property.type = 'object';
+    property.additionalProperties = true;
+  } else {
+    property.type = operationContractTypes.includes(field.type) ? field.type : 'string';
+  }
+  if (field.title) property.title = field.title;
+  if (field.description) property.description = field.description;
+  if (property.type === 'string' && field.minLength !== '') {
+    property.minLength = parseInt(field.minLength, 10);
+  }
+  if ((property.type === 'integer' || property.type === 'number') && field.minimum !== '') {
+    property.minimum = Number(field.minimum);
+  }
+  if ((property.type === 'integer' || property.type === 'number') && field.maximum !== '') {
+    property.maximum = Number(field.maximum);
+  }
+  return property;
+}
+
+function buildOperationSchemaFromEditor(card, kind) {
+  const editor = card.querySelector(`[data-operation-schema-editor="${kind}"]`);
+  if (!editor) {
+    return parseJsonField(card.querySelector(`[data-operation-json-kind="${kind}"]`)?.value || '{}', `${kind} JSON Schema`);
+  }
+  const schema = {
+    type: 'object',
+    properties: {},
+    additionalProperties: true,
+  };
+  const required = [];
+  const seen = new Set();
+  const label = kind === 'request' ? 'Вход операции' : 'Ответ операции';
+  editor.querySelectorAll('[data-operation-field-row]').forEach((row) => {
+    const field = operationFieldFromRow(row, label);
+    if (!field) return;
+    if (seen.has(field.name)) {
+      throw new Error(`${label}: дублируется поле ${field.name}.`);
+    }
+    seen.add(field.name);
+    schema.properties[field.name] = operationSchemaPropertyFromField(field);
+    if (field.required) {
+      required.push(field.name);
+    }
+  });
+  if (required.length) {
+    schema.required = required;
+  }
+  return schema;
+}
+
+function parseMockControlValue(row, { validate = true } = {}) {
+  const control = row.querySelector('[data-mock-field-value]');
+  if (!control) return undefined;
+  const name = control.dataset.mockFieldName;
+  const type = control.dataset.mockFieldType || 'string';
+  const required = control.dataset.mockFieldRequired === 'true';
+  const raw = String(control.value || '').trim();
+  if (!raw) {
+    if (required && validate) {
+      throw new Error(`Тестовый ответ mock: обязательное поле ${name} не заполнено.`);
+    }
+    return undefined;
+  }
+  if (type === 'string') {
+    return raw;
+  }
+  if (type === 'integer') {
+    const value = Number(raw);
+    if (!Number.isInteger(value)) {
+      if (!validate) return undefined;
+      throw new Error(`Тестовый ответ mock: поле ${name} должно быть целым числом.`);
+    }
+    return value;
+  }
+  if (type === 'number') {
+    const value = Number(raw);
+    if (!Number.isFinite(value)) {
+      if (!validate) return undefined;
+      throw new Error(`Тестовый ответ mock: поле ${name} должно быть числом.`);
+    }
+    return value;
+  }
+  if (type === 'boolean') {
+    if (!['true', 'false'].includes(raw)) {
+      if (!validate) return undefined;
+      throw new Error(`Тестовый ответ mock: поле ${name} должно быть true или false.`);
+    }
+    return raw === 'true';
+  }
+  try {
+    const value = JSON.parse(raw);
+    if (type === 'array' && !Array.isArray(value)) {
+      throw new Error('ожидался массив');
+    }
+    if (type === 'object' && (Array.isArray(value) || value === null || typeof value !== 'object')) {
+      throw new Error('ожидался объект');
+    }
+    return value;
+  } catch (error) {
+    if (!validate) return undefined;
+    throw new Error(`Тестовый ответ mock: поле ${name} содержит невалидный JSON (${error.message}).`);
+  }
+}
+
+function buildMockOutputFromEditor(card, { validate = true } = {}) {
+  const editor = card.querySelector('[data-operation-mock-editor]');
+  if (!editor) {
+    const raw = card.querySelector('[data-operation-json-kind="mock"]')?.value?.trim() || '';
+    return raw ? parseJsonField(raw, 'Тестовый ответ операции') : undefined;
+  }
+  const output = {};
+  editor.querySelectorAll('[data-operation-mock-row]').forEach((row) => {
+    const control = row.querySelector('[data-mock-field-value]');
+    const name = control?.dataset.mockFieldName;
+    const value = parseMockControlValue(row, { validate });
+    if (name && value !== undefined) {
+      output[name] = value;
+    }
+  });
+  return output;
+}
+
+function validateMockOutputAgainstResponseSchema(mockOutput = {}, responseSchema = {}) {
+  const fields = operationSchemaFields(responseSchema);
+  for (const field of fields) {
+    const value = mockOutput[field.name];
+    if (field.required && value === undefined) {
+      throw new Error(`Тестовый ответ mock: обязательное поле ${field.name} не заполнено.`);
+    }
+  }
+}
+
+function parseEndpointOperationCards(form, adapterType) {
   const cards = Array.from(form.querySelectorAll('[data-endpoint-operation-card]'));
   const operations = {};
   for (const card of cards) {
@@ -4248,15 +6489,21 @@ function parseEndpointOperationCards(form) {
       description: value('operation_description'),
       method: value('operation_method'),
       path: value('operation_path'),
-      request_schema: parseJsonField(value('operation_request_schema') || jsonPretty(defaultOperationRequestSchema()), `Вход операции ${operationId}`),
+      request_schema: buildOperationSchemaFromEditor(card, 'request'),
+      response_schema: buildOperationSchemaFromEditor(card, 'response'),
+      contract_version: value('operation_contract_version') || '1.0',
+      contract_status: value('operation_contract_status') || 'draft',
       timeout_seconds: parseInt(value('operation_timeout_seconds'), 10),
     };
     if (!operation.display_name || !operation.description || !operation.method || !operation.path) {
       throw new Error(`Операция ${operationId} должна иметь название, описание, метод и path.`);
     }
-    const mockOutput = value('operation_mock_output');
-    if (mockOutput) {
-      operation.mock_output = parseJsonField(mockOutput, `Ответ mock операции ${operationId}`);
+    const mockOutput = buildMockOutputFromEditor(card, { validate: true });
+    if (adapterType === 'mock') {
+      validateMockOutputAgainstResponseSchema(mockOutput || {}, operation.response_schema);
+    }
+    if (adapterType === 'mock' || mockOutput !== undefined) {
+      operation.mock_output = mockOutput || {};
     }
     operations[operationId] = operation;
   }
@@ -4277,6 +6524,8 @@ async function saveToolCatalogForm(form) {
     endpoint_bindings: existing?.endpoint_bindings || [],
     parameters_schema: parseJsonField(data.get('parameters_schema'), 'Схема параметров'),
     result_schema: parseJsonField(data.get('result_schema'), 'Схема результата'),
+    contract_version: String(data.get('contract_version') || '1.0').trim(),
+    contract_status: String(data.get('contract_status') || 'draft').trim(),
     policy: {
       default_timeout_seconds: parseInt(data.get('default_timeout_seconds'), 10),
       retry: {
@@ -4301,12 +6550,21 @@ async function deleteToolCatalogForm() {
 async function saveOperationBindingForm(form, submitter) {
   const data = new FormData(form);
   const operation = submitter?.value === 'unbind' ? 'unbind' : 'bind';
+  const endpointId = String(data.get('binding_endpoint_id') || '').trim();
+  const operationId = String(data.get('binding_operation_id') || '').trim();
+  const endpointOperation = findEndpointOperation(endpointId, operationId);
+  const contract = operation === 'unbind'
+    ? {}
+    : parseOperationBindingContract(form, endpointOperation);
   const binding = operation === 'unbind'
     ? {}
     : {
-      endpoint_id: String(data.get('binding_endpoint_id') || '').trim(),
-      operation_id: String(data.get('binding_operation_id') || '').trim(),
-      parameter_mapping: parseOperationParameterMapping(form),
+      endpoint_id: endpointId,
+      operation_id: operationId,
+      parameter_mapping: contract.parameter_mapping,
+      result_mapping: contract.result_mapping,
+      parameters_schema: contract.parameters_schema,
+      result_schema: contract.result_schema,
     };
   await applyOperationBindingMutation({
     operation,
@@ -4315,29 +6573,112 @@ async function saveOperationBindingForm(form, submitter) {
   });
 }
 
-function parseOperationParameterMapping(form) {
-  const mapping = {};
+async function saveOperationBindingCreateForm(form) {
+  const data = new FormData(form);
+  const endpointId = String(data.get('binding_endpoint_id') || '').trim();
+  const operationId = String(data.get('binding_operation_id') || '').trim();
+  const endpointOperation = findEndpointOperation(endpointId, operationId);
+  const contract = parseOperationBindingContract(form, endpointOperation);
+  const toolName = String(data.get('tool_name') || '').trim();
+  const actionType = String(data.get('action_type') || 'read_only').trim();
+  if (!toolName) {
+    throw new Error('Укажите техническое имя ReAct-вызова ИИ.');
+  }
+  const tool = createReactCallTemplateFromOperation({
+    toolName,
+    actionType,
+    description: String(data.get('description') || '').trim() || defaultReactCallDescription(operationId, endpointOperation),
+    operation: endpointOperation,
+  });
+  tool.parameters_schema = contract.parameters_schema;
+  tool.result_schema = contract.result_schema;
+  tool.endpoint_bindings = [{
+    endpoint_id: endpointId,
+    operation_id: operationId,
+    parameter_mapping: contract.parameter_mapping,
+    result_mapping: contract.result_mapping,
+  }];
+  await applyOperationBindingCreateMutation(tool);
+}
+
+function findEndpointOperation(endpointId, operationId) {
+  const endpoint = (state.lastData.integrationEndpoints || [])
+    .find((item) => item.endpoint_id === endpointId);
+  return endpoint?.operations?.[operationId] || {};
+}
+
+function parseOperationBindingContract(form, operation) {
+  const parameter_mapping = {};
+  const result_mapping = {};
+  const parameterProperties = {};
+  const parameterRequired = [];
+  const resultProperties = {};
+  const resultRequired = [];
+
   const rows = Array.from(form.querySelectorAll('[data-operation-param-row]'));
   for (const row of rows) {
     const parameterName = row.querySelector('[data-operation-param-name]')?.value?.trim() || '';
-    const required = row.dataset.required === 'true';
+    const endpointRequired = row.dataset.required === 'true';
     const source = row.querySelector('[data-operation-param-source]')?.value?.trim() || '';
     const value = source === 'react'
       ? row.querySelector('[data-operation-param-react]')?.value?.trim() || ''
       : row.querySelector('[data-operation-param-value]')?.value?.trim() || '';
     if (!parameterName) continue;
-    if (!source || !value) {
-      if (required) {
-        throw new Error(`Обязательный параметр операции ${parameterName} должен иметь источник значения.`);
+    if (!source) {
+      if (endpointRequired) {
+        throw new Error(`Обязательный параметр endpoint ${parameterName} должен иметь источник значения.`);
       }
       continue;
     }
     if (!['react', 'constant', 'secret'].includes(source)) {
-      throw new Error(`Параметр операции ${parameterName} имеет неизвестный источник: ${source}.`);
+      throw new Error(`Параметр endpoint ${parameterName} имеет неизвестный источник: ${source}.`);
     }
-    mapping[parameterName] = `${source}:${value}`;
+    if (!value) {
+      throw new Error(
+        source === 'react'
+          ? `Параметр endpoint ${parameterName}: укажите имя параметра ReAct.`
+          : `Параметр endpoint ${parameterName}: укажите значение для ${visibleLabels[source] || source}.`,
+      );
+    }
+    parameter_mapping[parameterName] = `${source}:${value}`;
+    if (source === 'react') {
+      parameterProperties[value] = parameterProperties[value]
+        || schemaPropertyForName(operation.request_schema || defaultOperationRequestSchema(), parameterName, value);
+      if (parseBoolean(row.querySelector('[data-operation-param-react-required]')?.value)) {
+        parameterRequired.push(value);
+      }
+    }
   }
-  return mapping;
+
+  const resultRows = Array.from(form.querySelectorAll('[data-operation-result-row]'));
+  for (const row of resultRows) {
+    const endpointFieldName = row.querySelector('[data-operation-response-field-name]')?.value?.trim() || '';
+    const include = parseBoolean(row.querySelector('[data-operation-result-include]')?.value);
+    if (!endpointFieldName || !include) continue;
+    const reactFieldName = row.querySelector('[data-operation-result-name]')?.value?.trim() || '';
+    if (!reactFieldName) {
+      throw new Error(`Поле ответа endpoint ${endpointFieldName}: укажите имя поля результата ReAct.`);
+    }
+    if (result_mapping[reactFieldName]) {
+      throw new Error(`Поле результата ReAct ${reactFieldName} указано несколько раз.`);
+    }
+    result_mapping[reactFieldName] = endpointFieldName;
+    resultProperties[reactFieldName] = schemaPropertyForName(
+      operation.response_schema || defaultOperationResponseSchema(),
+      endpointFieldName,
+      reactFieldName,
+    );
+    if (parseBoolean(row.querySelector('[data-operation-result-required]')?.value)) {
+      resultRequired.push(reactFieldName);
+    }
+  }
+
+  return {
+    parameter_mapping,
+    result_mapping,
+    parameters_schema: operationObjectSchema(parameterProperties, parameterRequired),
+    result_schema: operationObjectSchema(resultProperties, resultRequired),
+  };
 }
 
 async function deleteOperationBindingForm() {
@@ -4385,9 +6726,114 @@ async function deleteScenarioForm() {
   await applyScenarioMutation('delete', { scenario_id: state.scenarioId });
 }
 
+async function ensureResolutionProfilesForSlots(slots) {
+  const slotsWithoutProfile = slots.filter((slot) =>
+    slot.fill_method === 'resolution_profile' && !slot.resolution_profile_id,
+  );
+  if (!slotsWithoutProfile.length) {
+    return;
+  }
+
+  const active = await api('/admin/config/active/attribute_resolution_profiles');
+  const payload = JSON.parse(JSON.stringify(active.payload));
+  const profiles = payload.profiles || [];
+  let changed = false;
+
+  for (const slot of slotsWithoutProfile) {
+    const existingProfile = profiles.find((profile) => profileOutputSlotIds(profile).includes(slot.slot_id));
+    if (existingProfile) {
+      slot.resolution_profile_id = existingProfile.profile_id;
+      continue;
+    }
+    const profile = resolutionProfileBootstrapTemplate(slot, profiles);
+    profiles.push(profile);
+    slot.resolution_profile_id = profile.profile_id;
+    changed = true;
+  }
+
+  if (!changed) {
+    return;
+  }
+  payload.profiles = profiles;
+  await activateConfigPayload('attribute_resolution_profiles', payload, active.active_version_id);
+  state.lastData.resolutionProfiles = profiles;
+}
+
+function resolutionProfileBootstrapTemplate(slot, profiles) {
+  const profileId = nextBootstrapProfileId(slot.slot_id, profiles);
+  const slotName = slot.display_name || humanizeTechnicalKey(slot.slot_id);
+  const question = slot.fallback_question
+    || slot.user_question
+    || `Уточните значение поля "${slotName}".`;
+  const profile = {
+    profile_id: profileId,
+    display_name: `Разрешение: ${slotName}`,
+    status: 'draft',
+    description: `Черновик профиля разрешения для слота ${slot.slot_id}. Настройте источник данных и LLM-правила в разделе "1. Разрешение атрибутов".`,
+    target_slot_id: slot.slot_id,
+    input_slots: [{
+      slot_id: slot.slot_id,
+      required_for_operation: true,
+      can_ask_user: true,
+      description: `Исходное значение слота ${slotName}.`,
+    }],
+    enrichment_steps: [],
+    output_slots_order: [{
+      slot_id: slot.slot_id,
+      order: 1,
+      required_for_success: true,
+      source_hint: slot.slot_id,
+      fallback: 'ask_clarification',
+    }],
+    llm_resolution_script: {
+      script_text: '',
+      response_contract: defaultResolutionResponseContract(),
+    },
+    human_resolution_policy: {
+      clarification_question: question,
+      clarification_slots: [slot.slot_id],
+      handoff_package: [slot.slot_id],
+      handoff_action: 'operator_handoff',
+      fallback_action: 'ask_user',
+    },
+    fallback: {
+      action: 'ask_user',
+      question,
+    },
+    confidence_threshold: 0.7,
+    confidence_thresholds: {
+      auto_fill: 0.7,
+      clarification: 0.7,
+      operator_handoff: 0.5,
+    },
+    max_attempts: 1,
+    audit_required: true,
+    log_required: true,
+  };
+  profile.llm_resolution_script.script_text = defaultResolutionScriptText(profile);
+  return profile;
+}
+
+function nextBootstrapProfileId(slotId, profiles) {
+  const existing = new Set((profiles || []).map((profile) => profile.profile_id));
+  const normalizedSlotId = String(slotId || 'attribute')
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]+/g, '_')
+    .replace(/^[^a-z]+/, 'attribute_');
+  const base = `profile.${normalizedSlotId}.resolution`;
+  let candidate = base;
+  let index = 2;
+  while (existing.has(candidate)) {
+    candidate = `${base}_${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
 async function saveSlotSchemaForm(form) {
   const data = new FormData(form);
   const slots = parseSlotCards(form);
+  await ensureResolutionProfilesForSlots(slots);
   const slotSchema = {
     slot_schema_id: String(data.get('slot_schema_id') || '').trim(),
     display_name: String(data.get('display_name') || '').trim(),
@@ -4455,8 +6901,14 @@ function parseSlotCards(form) {
       slot.extraction_instruction = value('extraction_instruction');
       const examples = parseLines(value('examples'));
       if (examples.length) slot.examples = examples;
+    } else if (slot.fill_method === 'slot_autofill') {
+      const sourceRef = value('autofill_source_ref');
+      if (sourceRef) slot.autofill_source_ref = sourceRef;
     } else if (slot.fill_method === 'resolution_profile') {
-      slot.resolution_profile_id = value('resolution_profile_id');
+      const profileId = value('resolution_profile_id');
+      if (profileId) {
+        slot.resolution_profile_id = profileId;
+      }
       const fallbackQuestion = value('fallback_question');
       if (fallbackQuestion) slot.fallback_question = fallbackQuestion;
     } else if (slot.fill_method === 'operator_manual') {
@@ -4472,13 +6924,19 @@ function parseSlotCards(form) {
   if (emptySlot) {
     throw new Error('Каждый слот должен иметь ключ, название, priority group и способ заполнения.');
   }
-  const missingProfile = slots.find((slot) => slot.fill_method === 'resolution_profile' && !slot.resolution_profile_id);
-  if (missingProfile) {
-    throw new Error(`Для слота ${missingProfile.slot_id} выберите профиль разрешения атрибута.`);
+  const invalidSlot = slots.find((slot) => !/^[a-z][a-z0-9_.-]*$/.test(slot.slot_id));
+  if (invalidSlot) {
+    throw new Error(`Ключ слота "${invalidSlot.slot_id}" должен начинаться с латинской буквы и содержать только латиницу, цифры, _, - или точку.`);
+  }
+  const duplicateSlotId = slots
+    .map((slot) => slot.slot_id)
+    .find((slotId, index, all) => all.indexOf(slotId) !== index);
+  if (duplicateSlotId) {
+    throw new Error(`Ключ слота дублируется: ${duplicateSlotId}.`);
   }
   const missingUserQuestion = slots.find((slot) => slot.fill_method === 'user_question' && !slot.user_question);
   if (missingUserQuestion) {
-    throw new Error(`Для слота ${missingUserQuestion.slot_id} заполните вопрос пользователю.`);
+    throw new Error(`Для слота ${missingUserQuestion.slot_id} заполните вопрос клиенту.`);
   }
   const missingCaseSource = slots.find((slot) => slot.fill_method === 'case' && !slot.case_source_ref);
   if (missingCaseSource) {
@@ -4496,13 +6954,13 @@ function parseSlotCards(form) {
   const mismatchedProfile = slots.find((slot) => {
     if (slot.fill_method !== 'resolution_profile' || !slot.resolution_profile_id) return false;
     const profile = profileById[slot.resolution_profile_id];
-    return profile && !profile.output_slots?.includes(slot.slot_id);
+    return profile && !profileOutputSlotIds(profile).includes(slot.slot_id);
   });
   if (mismatchedProfile) {
     const profile = profileById[mismatchedProfile.resolution_profile_id];
     throw new Error(
       `Профиль "${profile.display_name}" не заполняет слот ${mismatchedProfile.slot_id}. `
-      + `Доступные выходные слоты профиля: ${formatList(profile.output_slots)}.`,
+      + `Доступные выходные слоты профиля: ${formatList(profileOutputSlotIds(profile))}.`,
     );
   }
   return slots;
@@ -4523,8 +6981,7 @@ async function saveRouteForm(form) {
       human_handoff_below: Number(data.get('human_handoff_below')),
     },
     rules: {
-      keywords: parseCsv(data.get('keywords')),
-      negative_keywords: parseCsv(data.get('negative_keywords')),
+      rule_items: parseClassificationRules(form),
     },
     top_categories_on_low_confidence: parseInt(data.get('top_categories_on_low_confidence'), 10),
   };
@@ -4539,6 +6996,27 @@ async function saveRouteForm(form) {
     stateOperationKey: 'routeOperation',
     successNoun: 'Маршрут',
   });
+}
+
+function parseClassificationRules(form) {
+  const rules = [];
+  form.querySelectorAll('[data-route-rule-card]').forEach((card) => {
+    const text = card.querySelector('[name="rule_text"]')?.value?.trim() || '';
+    if (!text) return;
+    rules.push({
+      text,
+      match_type: card.querySelector('[name="rule_match_type"]')?.value?.trim() || 'phrase',
+      polarity: card.querySelector('[name="rule_polarity"]')?.value?.trim() || 'positive',
+      weight: Number(card.querySelector('[name="rule_weight"]')?.value || 0.5),
+      required: parseBoolean(card.querySelector('[name="rule_required"]')?.value),
+      blocking: parseBoolean(card.querySelector('[name="rule_blocking"]')?.value),
+      explanation: card.querySelector('[name="rule_explanation"]')?.value?.trim() || `Признак классификации: ${text}`,
+    });
+  });
+  if (!rules.length) {
+    throw new Error('Маршрут должен содержать хотя бы одно правило классификации.');
+  }
+  return rules;
 }
 
 async function deleteRouteForm() {
@@ -4979,75 +7457,60 @@ function readModelProvider(data, providerId) {
 
 async function saveResolutionProfileForm(form) {
   const data = new FormData(form);
-  const [toolName, endpointId, operationId] = String(data.get('candidate_binding') || '').split('::');
   const clarificationQuestion = String(data.get('clarification_question') || '').trim();
+  const selectedTargetSlotId = String(data.get('target_slot_id') || '').trim();
+  const customTargetSlotId = String(data.get('target_slot_id_custom') || '').trim();
+  const targetSlotId = selectedTargetSlotId === '__custom__'
+    ? customTargetSlotId
+    : selectedTargetSlotId;
+  if (!targetSlotId) {
+    throw new Error('Выберите целевой слот или укажите ключ нового слота.');
+  }
+  if (!/^[a-z][a-z0-9_.-]*$/.test(targetSlotId)) {
+    throw new Error('Ключ целевого слота должен начинаться с латинской буквы и содержать только латиницу, цифры, _, - или точку.');
+  }
+  const inputSlotIds = formList(data, 'input_slots');
+  if (!inputSlotIds.length && targetSlotId) {
+    inputSlotIds.push(targetSlotId);
+  }
+  const outputRules = parseResolutionOutputRules(form, targetSlotId);
+  const outputSlotIds = outputRules.map((rule) => rule.slot_id);
+  const clarificationSlots = formList(data, 'clarification_slots')
+    .filter((slotId) => inputSlotIds.includes(slotId) || outputSlotIds.includes(slotId));
+  const handoffSlots = formList(data, 'handoff_package')
+    .filter((slotId) => inputSlotIds.includes(slotId) || outputSlotIds.includes(slotId));
+  const enrichmentSteps = parseEnrichmentSteps(form);
   const profile = {
     profile_id: String(data.get('profile_id') || '').trim(),
     display_name: String(data.get('display_name') || '').trim(),
     status: String(data.get('status') || '').trim(),
     description: String(data.get('description') || '').trim(),
-    target_slot_id: String(data.get('target_slot_id') || '').trim(),
-    output_slots: parseCsv(data.get('output_slots')),
-    input_attributes: buildResolutionInputAttributes(data),
-    candidate_source: {
-      source_type: String(data.get('candidate_source_type') || 'disabled').trim(),
-      parameter_mapping: parseCandidateParameterMapping(form),
+    target_slot_id: targetSlotId,
+    input_slots: inputSlotIds.map((slotId) => ({
+      slot_id: slotId,
+      required_for_operation: true,
+      can_ask_user: true,
+      description: '',
+    })),
+    enrichment_steps: enrichmentSteps,
+    output_slots_order: outputRules,
+    llm_resolution_script: {
+      script_text: String(data.get('llm_resolution_script_text') || '').trim(),
+      response_contract: defaultResolutionResponseContract(),
     },
-    result_policy: {
-      result_type: String(data.get('result_type') || 'list').trim(),
-      target_value_path: String(data.get('result_target_value_path') || '').trim(),
-      output_mapping: parseKeyValueLines(data.get('result_output_mapping'), 'Дополнительные выходные слоты'),
-    },
-    decision_policy: {
-      empty_result: String(data.get('decision_empty_result') || defaultResolutionDecisionPolicy.empty_result).trim(),
-      single_result: String(data.get('decision_single_result') || defaultResolutionDecisionPolicy.single_result).trim(),
-      multiple_results: String(data.get('decision_multiple_results') || defaultResolutionDecisionPolicy.multiple_results).trim(),
-      source_error: String(data.get('decision_source_error') || defaultResolutionDecisionPolicy.source_error).trim(),
-      attempt_limit: String(data.get('decision_attempt_limit') || defaultResolutionDecisionPolicy.attempt_limit).trim(),
-    },
-    clarification_policy: {
-      question: clarificationQuestion,
-      ask_for_attributes: parseCsv(data.get('clarification_ask_for_attributes')),
-    },
-    handoff_policy: {
-      action: String(data.get('handoff_action') || 'operator_handoff').trim(),
-      package: parseCsv(data.get('handoff_package')),
-    },
-    fallback: {
-      action: String(data.get('fallback_action') || '').trim(),
-      question: clarificationQuestion,
+    human_resolution_policy: {
+      clarification_question: clarificationQuestion,
+      clarification_slots: clarificationSlots.length ? clarificationSlots : [targetSlotId].filter(Boolean),
+      handoff_package: handoffSlots.length ? handoffSlots : outputSlotIds,
+      handoff_action: String(data.get('handoff_action') || 'operator_handoff').trim(),
+      fallback_action: String(data.get('fallback_action') || 'ask_user').trim(),
     },
     max_attempts: parseInt(data.get('max_attempts'), 10),
     audit_required: parseBoolean(data.get('audit_required')),
     log_required: parseBoolean(data.get('log_required')),
   };
-  if (toolName && endpointId && operationId) {
-    profile.candidate_source.tool_name = toolName;
-    profile.candidate_source.endpoint_id = endpointId;
-    profile.candidate_source.operation_id = operationId;
-  }
-  if (profile.candidate_source.source_type === 'ticket_history') {
-    profile.candidate_source.history_filter = parseJsonField(data.get('history_filter_json') || '{}', 'Фильтр истории заявок');
-  }
-  const listPath = String(data.get('result_list_path') || '').trim();
-  const objectPath = String(data.get('result_object_path') || '').trim();
-  const successPath = String(data.get('result_success_path') || '').trim();
-  const confidencePath = String(data.get('result_confidence_path') || '').trim();
-  const displayValuePath = String(data.get('result_display_value_path') || '').trim();
-  if (listPath) {
-    profile.result_policy.list_path = listPath;
-  }
-  if (objectPath) {
-    profile.result_policy.object_path = objectPath;
-  }
-  if (successPath) {
-    profile.result_policy.success_path = successPath;
-  }
-  if (confidencePath) {
-    profile.result_policy.confidence_path = confidencePath;
-  }
-  if (displayValuePath) {
-    profile.result_policy.display_value_path = displayValuePath;
+  if (!profile.llm_resolution_script.script_text) {
+    profile.llm_resolution_script.script_text = defaultResolutionScriptText(profile);
   }
   const confidenceThreshold = String(data.get('confidence_threshold') || '').trim();
   if (confidenceThreshold) {
@@ -5075,6 +7538,137 @@ async function deleteResolutionProfileForm() {
     throw new Error('Профиль для удаления не выбран.');
   }
   await applyResolutionProfileMutation('delete', { profile_id: state.resolutionProfileId });
+}
+
+async function saveSlotAutofillProfileForm(form) {
+  const data = new FormData(form);
+  const output = parseSlotAutofillOutputRows(form);
+  if (!output.mappings.length) {
+    throw new Error('Добавьте хотя бы одно поле результата, которое заполняет слот.');
+  }
+  const profile = {
+    profile_id: String(data.get('profile_id') || '').trim(),
+    display_name: String(data.get('display_name') || '').trim(),
+    status: String(data.get('status') || 'draft').trim(),
+    description: String(data.get('description') || '').trim(),
+    slot_schema_id: String(data.get('slot_schema_id') || '').trim(),
+    enabled: String(data.get('status') || 'draft').trim() === 'active',
+    react_call: String(data.get('react_call') || '').trim(),
+    run_order: parseInt(data.get('run_order') || '1', 10),
+    accept_policy: String(data.get('accept_policy') || 'single_result').trim(),
+    input_mapping: parseSlotAutofillInputMapping(form),
+    output_mapping: output.mappings,
+    on_no_result: String(data.get('on_no_result') || 'continue').trim(),
+    on_ambiguous_result: String(data.get('on_ambiguous_result') || 'ask_client').trim(),
+  };
+  if (!profile.profile_id || !profile.display_name || !profile.slot_schema_id || !profile.react_call) {
+    throw new Error('Заполните название, схему слотов и ReAct-вызов.');
+  }
+  if (output.newSlots.length) {
+    await ensureSlotAutofillSlots(profile, output.newSlots);
+  }
+  await applySlotAutofillProfileMutation(state.slotAutofillOperation, profile);
+}
+
+async function deleteSlotAutofillProfileForm() {
+  if (!state.slotAutofillProfileId) {
+    throw new Error('Профиль автозаполнения для удаления не выбран.');
+  }
+  await applySlotAutofillProfileMutation('delete', { profile_id: state.slotAutofillProfileId });
+}
+
+function parseSlotAutofillInputMapping(form) {
+  const mapping = {};
+  form.querySelectorAll('[data-slot-autofill-input-row]').forEach((row) => {
+    const parameter = row.querySelector('[data-slot-autofill-param-name]')?.value?.trim();
+    const mode = row.querySelector('[data-slot-autofill-param-source-mode]')?.value?.trim();
+    const custom = row.querySelector('[data-slot-autofill-param-source-custom]')?.value?.trim();
+    if (!parameter || !mode || mode === '__none__') return;
+    const sourceRef = mode.endsWith(':') ? `${mode}${custom}` : mode;
+    if (sourceRef && !sourceRef.endsWith(':')) {
+      mapping[parameter] = sourceRef;
+    }
+  });
+  return mapping;
+}
+
+function parseSlotAutofillOutputRows(form) {
+  const mappings = [];
+  const newSlots = [];
+  const seenTargets = new Set();
+  form.querySelectorAll('[data-slot-autofill-output-row]').forEach((row) => {
+    const resultField = row.querySelector('[data-slot-autofill-result-field]')?.value?.trim();
+    const action = row.querySelector('[data-slot-autofill-output-action]')?.value || 'ignore';
+    const requiredForSuccess = row.querySelector('[data-slot-autofill-required]')?.checked === true;
+    if (!resultField || action === 'ignore') return;
+    let targetSlot = '';
+    if (action === 'existing') {
+      targetSlot = row.querySelector('[data-slot-autofill-target-slot]')?.value?.trim() || '';
+      if (!targetSlot) {
+        throw new Error(`Для поля результата ${resultField} выберите существующий слот.`);
+      }
+    } else if (action === 'new') {
+      targetSlot = row.querySelector('[data-slot-autofill-new-slot-key]')?.value?.trim() || '';
+      const displayName = row.querySelector('[data-slot-autofill-new-slot-display]')?.value?.trim() || humanizeTechnicalKey(targetSlot);
+      const priorityGroup = row.querySelector('[data-slot-autofill-new-slot-priority-value]')?.value || 'context';
+      const required = row.querySelector('[data-slot-autofill-new-slot-required-value]')?.checked === true;
+      if (!targetSlot || !displayName) {
+        throw new Error(`Для поля результата ${resultField} заполните ключ и название нового слота.`);
+      }
+      newSlots.push({
+        slot_id: targetSlot,
+        display_name: displayName,
+        priority_group: priorityGroup,
+        required,
+        fill_method: 'slot_autofill',
+        autofill_source_ref: resultField,
+      });
+    }
+    if (!/^[a-z][a-z0-9_.-]*$/.test(targetSlot)) {
+      throw new Error(`Ключ слота "${targetSlot}" должен начинаться с латинской буквы и содержать только латиницу, цифры, _, - или точку.`);
+    }
+    if (seenTargets.has(targetSlot)) {
+      throw new Error(`Слот ${targetSlot} указан в автозаполнении несколько раз.`);
+    }
+    seenTargets.add(targetSlot);
+    mappings.push({
+      result_field: resultField,
+      target_slot: targetSlot,
+      required_for_success: requiredForSuccess,
+    });
+  });
+  return { mappings, newSlots };
+}
+
+async function ensureSlotAutofillSlots(profile, newSlots) {
+  const active = await api('/admin/config/active/slot_schemas');
+  const payload = JSON.parse(JSON.stringify(active.payload));
+  const slotSchemas = payload.slot_schemas || [];
+  const schema = slotSchemas.find((item) => item.slot_schema_id === profile.slot_schema_id);
+  if (!schema) {
+    throw new Error(`Схема слотов не найдена: ${profile.slot_schema_id}`);
+  }
+  let changed = false;
+  const existing = new Set((schema.slots || []).map((slot) => slot.slot_id));
+  for (const slot of newSlots) {
+    if (existing.has(slot.slot_id)) continue;
+    schema.slots.push({
+      ...slot,
+      autofill_source_ref: `${profile.profile_id}:${slot.autofill_source_ref}`,
+    });
+    existing.add(slot.slot_id);
+    changed = true;
+  }
+  if (!changed) return;
+  schema.required_slots = (schema.slots || []).filter((slot) => slot.required).map((slot) => slot.slot_id);
+  schema.auto_fill_slots = (schema.slots || [])
+    .filter((slot) => !['user_question', 'operator_manual'].includes(slot.fill_method))
+    .map((slot) => slot.slot_id);
+  schema.question_order = (schema.slots || [])
+    .filter((slot) => ['user_question', 'resolution_profile', 'operator_manual'].includes(slot.fill_method))
+    .map((slot) => slot.slot_id);
+  payload.slot_schemas = slotSchemas;
+  await activateConfigPayload('slot_schemas', payload, active.active_version_id);
 }
 
 function compactScenarioPayload(scenario) {
@@ -5156,6 +7750,42 @@ async function applyResolutionProfileMutation(operation, profile) {
   }[operation];
   setNotice(`Профиль ${actionText}. Активирована версия ${version.version_id}.`, 'success');
   await renderResolutionProfiles();
+}
+
+async function applySlotAutofillProfileMutation(operation, profile) {
+  if (operation === 'delete') {
+    const [autofillActive, slotSchemasActive, scenariosActive] = await Promise.all([
+      api('/admin/config/active/slot_autofill_profiles'),
+      api('/admin/config/active/slot_schemas'),
+      api('/admin/config/active/service_scenarios'),
+    ]);
+    const current = (autofillActive.payload?.profiles || []).find((item) => item.profile_id === profile.profile_id);
+    const targetSlots = new Set((current?.output_mapping || []).map((item) => item.target_slot));
+    const usedSchemas = (slotSchemasActive.payload?.slot_schemas || []).filter((schema) =>
+      (schema.slots || []).some((slot) => slot.fill_method === 'slot_autofill' && targetSlots.has(slot.slot_id)),
+    );
+    if (usedSchemas.length) {
+      const schemaIds = new Set(usedSchemas.map((schema) => schema.slot_schema_id));
+      const scenarioNames = (scenariosActive.payload?.scenarios || [])
+        .filter((scenario) => schemaIds.has(scenario.slot_schema_id))
+        .map((scenario) => scenario.display_name || scenario.scenario_id);
+      throw new Error(
+        `Профиль автозаполнения используется слотами: ${Array.from(targetSlots).join(', ')}. `
+        + `Сценарии: ${scenarioNames.join(', ') || 'не найдены'}. Сначала измените способ заполнения этих слотов.`,
+      );
+    }
+  }
+  await applyConfigItemMutation({
+    domain: 'slot_autofill_profiles',
+    collectionKey: 'profiles',
+    idKey: 'profile_id',
+    item: profile,
+    operation,
+    referenceKey: null,
+    stateIdKey: 'slotAutofillProfileId',
+    stateOperationKey: 'slotAutofillOperation',
+    successNoun: 'Профиль автозаполнения',
+  });
 }
 
 async function applyPromptPackMutation(operation, promptPack) {
@@ -5268,10 +7898,11 @@ async function applyIntegrationEndpointMutation(operation, endpoint) {
 }
 
 async function applyToolCatalogMutation(operation, tool) {
-  const [active, matrixActive, resolutionActive, channelsActive] = await Promise.all([
+  const [active, matrixActive, resolutionActive, slotAutofillActive, channelsActive] = await Promise.all([
     api('/admin/config/active/tools'),
     api('/admin/config/active/tool_launch_matrix'),
     api('/admin/config/active/attribute_resolution_profiles'),
+    api('/admin/config/active/slot_autofill_profiles'),
     api('/admin/config/active/interaction_channels'),
   ]);
   const payload = JSON.parse(JSON.stringify(active.payload));
@@ -5280,6 +7911,7 @@ async function applyToolCatalogMutation(operation, tool) {
   const index = tools.findIndex((item) => item.tool_name === toolName);
   const matrices = matrixActive.payload?.matrices || [];
   const resolutionProfiles = resolutionActive.payload?.profiles || [];
+  const slotAutofillProfiles = slotAutofillActive.payload?.profiles || [];
   const channels = channelsActive.payload?.channels || [];
   if (operation === 'create') {
     if (index >= 0) {
@@ -5306,6 +7938,7 @@ async function applyToolCatalogMutation(operation, tool) {
         matrices,
         resolutionProfiles,
         channels,
+        slotAutofillProfiles,
       );
       if (usage.length) {
         throw new Error(
@@ -5318,7 +7951,7 @@ async function applyToolCatalogMutation(operation, tool) {
     if (index < 0) {
       throw new Error(`ReAct-вызов ИИ не найден: ${toolName}`);
     }
-    const usage = toolUsage(toolName, matrices, resolutionProfiles, channels);
+    const usage = toolUsage(toolName, matrices, resolutionProfiles, channels, slotAutofillProfiles);
     if (usage.length) {
       throw new Error(`ReAct-вызов ИИ используется: ${usage.join('; ')}. Сначала уберите связи.`);
     }
@@ -5348,10 +7981,12 @@ async function applyOperationBindingMutation({
   toolName,
   binding,
 }) {
-  const [active, matrixActive, resolutionActive, channelsActive] = await Promise.all([
+  const [active, endpointsActive, matrixActive, resolutionActive, slotAutofillActive, channelsActive] = await Promise.all([
     api('/admin/config/active/tools'),
+    api('/admin/config/active/integration_endpoints'),
     api('/admin/config/active/tool_launch_matrix'),
     api('/admin/config/active/attribute_resolution_profiles'),
+    api('/admin/config/active/slot_autofill_profiles'),
     api('/admin/config/active/interaction_channels'),
   ]);
   const payload = JSON.parse(JSON.stringify(active.payload));
@@ -5363,24 +7998,35 @@ async function applyOperationBindingMutation({
   const currentBinding = currentToolBinding(tool);
   const matrices = matrixActive.payload?.matrices || [];
   const resolutionProfiles = resolutionActive.payload?.profiles || [];
+  const slotAutofillProfiles = slotAutofillActive.payload?.profiles || [];
   const channels = channelsActive.payload?.channels || [];
+  const endpoints = endpointsActive.payload?.endpoints || [];
   let nextBinding = null;
 
   if (operation === 'bind') {
     if (!binding.endpoint_id || !binding.operation_id) {
       throw new Error('Для привязки выберите подключение и операцию.');
     }
+    const selectedOperation = operationForBinding(binding, endpoints);
+    if (!selectedOperation) {
+      throw new Error(`Endpoint-операция не найдена: ${binding.endpoint_id}/${binding.operation_id}`);
+    }
+    tool.parameters_schema = binding.parameters_schema || operationObjectSchema({}, []);
+    tool.result_schema = binding.result_schema || operationObjectSchema({}, []);
+    tool.contract_version = selectedOperation.contract_version || tool.contract_version || '1.0';
+    tool.contract_status = selectedOperation.contract_status || tool.contract_status || 'draft';
     nextBinding = {
       endpoint_id: binding.endpoint_id,
       operation_id: binding.operation_id,
       parameter_mapping: binding.parameter_mapping || {},
+      result_mapping: binding.result_mapping || {},
     };
     tool.endpoint_bindings = [nextBinding];
   } else if (operation === 'unbind') {
     if (!currentBinding) {
       throw new Error('У ReAct-вызова ИИ нет текущей привязки операции.');
     }
-    const usage = toolUsage(toolName, matrices, resolutionProfiles, channels);
+    const usage = toolUsage(toolName, matrices, resolutionProfiles, channels, slotAutofillProfiles);
     if (usage.length) {
       throw new Error(`ReAct-вызов ИИ используется: ${usage.join('; ')}. Сначала уберите связи перед отвязкой операции.`);
     }
@@ -5394,6 +8040,7 @@ async function applyOperationBindingMutation({
     await updateOperationBindingReferences(toolName, nextBinding);
   }
   state.operationBindingToolName = toolName;
+  state.operationBindingLastToolName = toolName;
   if (operation === 'unbind') {
     state.operationBindingEndpointId = '';
     state.operationBindingOperationId = '';
@@ -5409,11 +8056,34 @@ async function applyOperationBindingMutation({
   await renderOperationBindings();
 }
 
+async function applyOperationBindingCreateMutation(tool) {
+  const active = await api('/admin/config/active/tools');
+  const payload = JSON.parse(JSON.stringify(active.payload));
+  const tools = payload.tools || [];
+  if (tools.some((item) => item.tool_name === tool.tool_name)) {
+    throw new Error(`ReAct-вызов ИИ уже существует: ${tool.tool_name}`);
+  }
+  if (!tool.endpoint_bindings?.[0]?.endpoint_id || !tool.endpoint_bindings?.[0]?.operation_id) {
+    throw new Error('Для создания выберите подключение и операцию.');
+  }
+  tools.push(tool);
+  payload.tools = tools;
+  const version = await activateConfigPayload('tools', payload, active.active_version_id);
+  const binding = currentToolBinding(tool);
+  state.toolCatalogName = tool.tool_name;
+  state.operationBindingToolName = tool.tool_name;
+  state.operationBindingLastToolName = tool.tool_name;
+  state.operationBindingMode = 'bind';
+  state.operationBindingEndpointId = binding.endpoint_id;
+  state.operationBindingOperationId = binding.operation_id;
+  setNotice(`ReAct-вызов ИИ создан и привязан. Активирована версия ${version.version_id}.`, 'success');
+  await renderOperationBindings();
+}
+
 async function updateOperationBindingReferences(toolName, binding) {
   if (!binding) return;
-  const [matrixActive, resolutionActive, channelsActive] = await Promise.all([
+  const [matrixActive, channelsActive] = await Promise.all([
     api('/admin/config/active/tool_launch_matrix'),
-    api('/admin/config/active/attribute_resolution_profiles'),
     api('/admin/config/active/interaction_channels'),
   ]);
   const updateAction = (action) => {
@@ -5435,20 +8105,6 @@ async function updateOperationBindingReferences(toolName, binding) {
   }
   if (matrixChanged) {
     await activateConfigPayload('tool_launch_matrix', matrixPayload, matrixActive.active_version_id);
-  }
-
-  const resolutionPayload = JSON.parse(JSON.stringify(resolutionActive.payload));
-  let resolutionChanged = false;
-  for (const profile of resolutionPayload.profiles || []) {
-    const source = profile.candidate_source || {};
-    if (source.source_type === 'react_call' && source.tool_name === toolName) {
-      source.endpoint_id = binding.endpoint_id;
-      source.operation_id = binding.operation_id;
-      resolutionChanged = true;
-    }
-  }
-  if (resolutionChanged) {
-    await activateConfigPayload('attribute_resolution_profiles', resolutionPayload, resolutionActive.active_version_id);
   }
 
   const channelsPayload = JSON.parse(JSON.stringify(channelsActive.payload));
@@ -5728,42 +8384,11 @@ function parseBoolean(value) {
   return String(value) === 'true';
 }
 
-function buildResolutionInputAttributes(data) {
-  const attributes = [];
-  const seen = new Set();
-  const pushAttribute = (attributeId, source, extra = {}) => {
-    if (!attributeId || seen.has(attributeId)) return;
-    seen.add(attributeId);
-    attributes.push({
-      attribute_id: attributeId,
-      display_name: humanizeTechnicalKey(attributeId),
-      source,
-      required: source === 'slot',
-      ...extra,
-    });
-  };
-  for (const attributeId of parseCsv(data.get('llm_attributes'))) {
-    pushAttribute(attributeId, 'llm', {
-      extraction_instruction: `Извлеки ${humanizeTechnicalKey(attributeId)} из текста обращения.`,
-    });
-  }
-  for (const attributeId of parseCsv(data.get('slot_attributes'))) {
-    pushAttribute(attributeId, 'slot', { source_ref: attributeId });
-  }
-  for (const attributeId of parseCsv(data.get('operator_attributes'))) {
-    pushAttribute(attributeId, 'operator_answer');
-  }
-  if (!attributes.length) {
-    throw new Error('Профиль должен содержать хотя бы один признак для поиска.');
-  }
-  return attributes;
-}
-
-function parseCandidateParameterMapping(form) {
+function parseResolverParameterMapping(form) {
   const mapping = {};
-  form.querySelectorAll('[data-candidate-param-row]').forEach((row) => {
-    const parameterName = row.querySelector('[data-candidate-param-name]')?.value?.trim();
-    const sourceRef = row.querySelector('[data-candidate-param-source]')?.value?.trim();
+  form.querySelectorAll('[data-resolver-param-row]').forEach((row) => {
+    const parameterName = row.querySelector('[data-resolver-param-name]')?.value?.trim();
+    const sourceRef = row.querySelector('[data-resolver-param-source]')?.value?.trim();
     if (parameterName && sourceRef) {
       mapping[parameterName] = sourceRef;
     }
@@ -5771,25 +8396,137 @@ function parseCandidateParameterMapping(form) {
   return mapping;
 }
 
-function parseKeyValueLines(value, label) {
-  const result = {};
-  const items = String(value || '')
-    .split(/\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  for (const item of items) {
-    const separatorIndex = item.indexOf('=');
-    if (separatorIndex < 1) {
-      throw new Error(`${label}: используйте формат параметр=источник.`);
-    }
-    const key = item.slice(0, separatorIndex).trim();
-    const itemValue = item.slice(separatorIndex + 1).trim();
-    if (!key || !itemValue) {
-      throw new Error(`${label}: параметр и источник не должны быть пустыми.`);
-    }
-    result[key] = itemValue;
+function parseOperationResultFields(form) {
+  const fields = [];
+  const seen = new Set();
+  form.querySelectorAll('[data-resolution-result-field-row]').forEach((row) => {
+    const fieldId = row.querySelector('[data-resolution-result-field-id]')?.value?.trim();
+    if (!fieldId || seen.has(fieldId)) return;
+    seen.add(fieldId);
+    fields.push({
+      field_id: fieldId,
+      display_name: row.querySelector('[data-resolution-result-field-name]')?.value?.trim() || humanizeTechnicalKey(fieldId),
+      field_type: row.querySelector('[data-resolution-result-field-type]')?.value || 'unknown',
+      description: row.querySelector('[data-resolution-result-field-description]')?.value?.trim() || '',
+    });
+  });
+  if (!fields.length) {
+    fields.push({ field_id: 'value', display_name: 'Значение', field_type: 'unknown', description: '' });
   }
-  return result;
+  return fields;
+}
+
+function parseEnrichmentParameterMapping(card) {
+  const mapping = {};
+  card.querySelectorAll('[data-enrichment-param-row]').forEach((row) => {
+    const parameterName = row.querySelector('[data-enrichment-param-name]')?.value?.trim();
+    const mode = row.querySelector('[data-enrichment-param-source-mode]')?.value?.trim();
+    const custom = row.querySelector('[data-enrichment-param-source-custom]')?.value?.trim();
+    const sourceRef = mode === 'constant:' || mode === 'secret:'
+      ? custom ? `${mode}${custom}` : ''
+      : mode === 'custom:'
+        ? custom || ''
+        : mode || row.querySelector('[data-enrichment-param-source]')?.value?.trim() || '';
+    if (parameterName && sourceRef) {
+      mapping[parameterName] = sourceRef;
+    }
+  });
+  return mapping;
+}
+
+function parseEnrichmentStepCard(card, index) {
+  if (!card.querySelector('[data-enrichment-step-editor]')) {
+    const jsonText = card.querySelector('[data-enrichment-step-json]')?.value || '{}';
+    try {
+      return JSON.parse(jsonText);
+    } catch (error) {
+      throw new Error(`Шаг обогащения ${index + 1}: не удалось прочитать данные (${error.message})`);
+    }
+  }
+  const reactCall = card.querySelector('[data-enrichment-react-call]')?.value?.trim() || '';
+  const entityName = card.querySelector('[data-enrichment-result-entity]')?.value?.trim() || '';
+  if (!reactCall) {
+    throw new Error(`В шаге обогащения ${index + 1} выберите ReAct-вызов.`);
+  }
+  if (!entityName || !/^[a-z][a-z0-9_.-]*$/.test(entityName)) {
+    throw new Error(`В шаге обогащения ${index + 1} укажите корректное имя сущности результата.`);
+  }
+  return {
+    step_name: card.querySelector('[data-enrichment-step-name]')?.value?.trim() || `Шаг ${index + 1}`,
+    react_call: reactCall,
+    parameter_mapping: parseEnrichmentParameterMapping(card),
+    result_entity_name: entityName,
+    result_entity_description: card.querySelector('[data-enrichment-result-description]')?.value?.trim() || 'Результат ReAct-вызова.',
+    result_fields: parseOperationResultFields(card),
+    on_error: card.querySelector('[data-enrichment-on-error]')?.value || 'continue_to_llm',
+  };
+}
+
+function parseEnrichmentSteps(form) {
+  const steps = [];
+  const seenEntities = new Set();
+  const cards = Array.from(form.querySelectorAll('[data-enrichment-step-card]'));
+  for (const [index, card] of cards.entries()) {
+    const step = parseEnrichmentStepCard(card, index);
+    if (!step.react_call) {
+      throw new Error(`В шаге обогащения ${index + 1} выберите ReAct-вызов.`);
+    }
+    const entityName = step.result_entity_name || '';
+    if (!entityName || !/^[a-z][a-z0-9_.-]*$/.test(entityName)) {
+      throw new Error(`В шаге обогащения ${index + 1} укажите корректное имя сущности результата.`);
+    }
+    if (seenEntities.has(entityName)) {
+      throw new Error(`Сущность результата дублируется: ${entityName}.`);
+    }
+    seenEntities.add(entityName);
+    steps.push(step);
+  }
+  return steps;
+}
+
+function parseResolutionOutputRules(form, targetSlotId) {
+  const rows = Array.from(form.querySelectorAll('[data-resolution-output-row]'));
+  const rules = [];
+  const seen = new Set();
+  for (const row of rows) {
+    const selectedSlotId = row.querySelector('[data-resolution-output-slot]')?.value?.trim();
+    const customSlotId = row.querySelector('[data-resolution-output-slot-custom-value]')?.value?.trim();
+    const slotId = selectedSlotId === '__custom__' ? customSlotId : selectedSlotId;
+    if (selectedSlotId === '__custom__' && !slotId) {
+      throw new Error('Укажите ключ нового выходного слота.');
+    }
+    if (slotId && !/^[a-z][a-z0-9_.-]*$/.test(slotId)) {
+      throw new Error(`Ключ выходного слота "${slotId}" должен начинаться с латинской буквы и содержать только латиницу, цифры, _, - или точку.`);
+    }
+    if (!slotId || seen.has(slotId)) continue;
+    seen.add(slotId);
+    rules.push({
+      slot_id: slotId,
+      order: parseInt(row.querySelector('[data-resolution-output-order]')?.value || String(rules.length + 1), 10),
+      required_for_success: parseBoolean(row.querySelector('[data-resolution-output-required]')?.value),
+      source_hint: row.querySelector('[data-resolution-output-source]')?.value?.trim() || slotId,
+      fallback: row.querySelector('[data-resolution-output-fallback]')?.value || (slotId === targetSlotId ? 'ask_clarification' : 'leave_empty'),
+    });
+  }
+  if (targetSlotId && !rules.some((rule) => rule.slot_id === targetSlotId)) {
+    rules.unshift({
+      slot_id: targetSlotId,
+      order: 1,
+      required_for_success: true,
+      source_hint: targetSlotId,
+      fallback: 'ask_clarification',
+    });
+  }
+  if (!rules.length) {
+    throw new Error('Профиль должен содержать хотя бы один выходной слот.');
+  }
+  return rules
+    .sort((left, right) => left.order - right.order)
+    .map((rule, index) => ({
+      ...rule,
+      order: index + 1,
+      required_for_success: rule.required_for_success || rule.slot_id === targetSlotId,
+    }));
 }
 
 function parseHistoryFilter(card) {
@@ -5820,13 +8557,313 @@ function addSlotCard() {
     order,
     true,
     state.lastData.resolutionProfiles || [],
+    state.lastData.confidenceDefaults || {},
   ).trim();
   container.appendChild(wrapper.firstElementChild);
   syncSlotCardFillMethod(container.lastElementChild);
 }
 
+function addSlotAutofillOutputRow(target) {
+  const form = target.closest('form');
+  const container = form?.querySelector('[data-slot-autofill-output-list]');
+  if (!container) return;
+  const schemaId = form.querySelector('[name="slot_schema_id"]')?.value;
+  const slotSchema = (state.lastData.slotSchemas || []).find((schema) => schema.slot_schema_id === schemaId) || { slots: [] };
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = renderSlotAutofillOutputRow({}, slotSchema).trim();
+  container.appendChild(wrapper.firstElementChild);
+  syncSlotAutofillOutputRow(container.lastElementChild);
+}
+
+function removeSlotAutofillOutputRow(target) {
+  const row = target.closest('[data-slot-autofill-output-row]');
+  if (!row) return;
+  row.remove();
+}
+
+function addResolutionResultFieldRow(target) {
+  const container = target?.closest('[data-enrichment-step-card]')?.querySelector('[data-resolution-result-field-list]')
+    || document.querySelector('[data-resolution-result-field-list]');
+  if (!container) return;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = renderOperationResultFieldRow({
+    field_id: '',
+    display_name: '',
+    field_type: 'unknown',
+    description: '',
+  }).trim();
+  container.appendChild(wrapper.firstElementChild);
+}
+
+function removeResolutionResultFieldRow(target) {
+  const row = target.closest('[data-resolution-result-field-row]');
+  if (!row) return;
+  const container = row.parentElement;
+  if (container && container.querySelectorAll('[data-resolution-result-field-row]').length <= 1) {
+    throw new Error('Оставьте хотя бы одно поле результата сущности.');
+  }
+  row.remove();
+}
+
+function currentEnrichmentStepsFromDom(form) {
+  return Array.from(form?.querySelectorAll('[data-enrichment-step-card]') || [])
+    .map((card, index) => parseEnrichmentStepCard(card, index));
+}
+
+function currentResolutionOutputRulesFromDom(form) {
+  return Array.from(form?.querySelectorAll('[data-resolution-output-row]') || []).map((row, index) => {
+    const selectedSlotId = row.querySelector('[data-resolution-output-slot]')?.value?.trim();
+    const customSlotId = row.querySelector('[data-resolution-output-slot-custom-value]')?.value?.trim();
+    const slotId = selectedSlotId === '__custom__' ? customSlotId : selectedSlotId;
+    return {
+      slot_id: slotId || '',
+      order: parseInt(row.querySelector('[data-resolution-output-order]')?.value || String(index + 1), 10),
+      required_for_success: parseBoolean(row.querySelector('[data-resolution-output-required]')?.value),
+      source_hint: row.querySelector('[data-resolution-output-source]')?.value?.trim() || slotId || '',
+      fallback: row.querySelector('[data-resolution-output-fallback]')?.value || 'leave_empty',
+    };
+  }).filter((rule) => rule.slot_id);
+}
+
+function currentResolutionSlotContextFromForm(form) {
+  const profileId = form?.querySelector('[name="profile_id"]')?.value?.trim() || state.resolutionProfileId;
+  const targetSelectValue = form?.querySelector('[data-resolution-target-slot]')?.value?.trim() || '';
+  const targetCustomValue = form?.querySelector('[name="target_slot_id_custom"]')?.value?.trim() || '';
+  const targetSlotId = targetSelectValue === '__custom__' ? targetCustomValue : targetSelectValue;
+  return buildResolutionSlotContext(
+    {
+      profile_id: profileId,
+      target_slot_id: targetSlotId,
+    },
+    state.lastData.slotSchemas || [],
+    state.lastData.serviceScenarios || [],
+  );
+}
+
+function addEnrichmentStep(target) {
+  const form = target.closest('form');
+  const container = form?.querySelector('[data-enrichment-step-list]');
+  if (!container) return;
+  const tools = state.lastData.toolCatalog || [];
+  const steps = currentEnrichmentStepsFromDom(form);
+  const index = steps.length;
+  const tool = tools[0] || null;
+  steps.push({
+    step_name: '',
+    react_call: tool?.tool_name || '',
+    parameter_mapping: {},
+    result_entity_name: `entity_${index + 1}`,
+    result_entity_description: '',
+    result_fields: resultFieldsFromTool(tool),
+    on_error: 'continue_to_llm',
+  });
+  state.resolutionEnrichmentEditIndex = index;
+  rerenderEnrichmentSteps(form, steps);
+}
+
+function removeEnrichmentStep(target) {
+  const card = target.closest('[data-enrichment-step-card]');
+  if (!card) return;
+  const form = target.closest('form');
+  const index = Number(card.dataset.enrichmentStepIndex || 0);
+  const steps = currentEnrichmentStepsFromDom(form);
+  steps.splice(index, 1);
+  state.resolutionEnrichmentEditIndex = Math.max(0, Math.min(index, steps.length - 1));
+  rerenderEnrichmentSteps(form, steps);
+}
+
+function editEnrichmentStep(target) {
+  const form = target.closest('form');
+  state.resolutionEnrichmentEditIndex = Number(target.dataset.stepIndex || 0);
+  rerenderEnrichmentSteps(form, currentEnrichmentStepsFromDom(form));
+}
+
+function refreshEnrichmentStepCard(target) {
+  const form = target.closest('form');
+  const card = target.closest('[data-enrichment-step-card]');
+  const container = form?.querySelector('[data-enrichment-step-list]');
+  if (!form || !card || !container) return;
+  const cards = Array.from(container.querySelectorAll('[data-enrichment-step-card]'));
+  const index = cards.indexOf(card);
+  if (index < 0) return;
+  const steps = currentEnrichmentStepsFromDom(form);
+  const step = { ...steps[index], react_call: target.value };
+  const tool = findToolInCatalog(state.lastData.toolCatalog || [], step.react_call);
+  if (!step.result_entity_name || /^entity_\d+$/.test(step.result_entity_name)) {
+    step.result_entity_name = inferEntityNameFromTool(tool, index);
+  }
+  step.result_fields = resultFieldsFromTool(tool);
+  steps[index] = step;
+  state.resolutionEnrichmentEditIndex = index;
+  rerenderEnrichmentSteps(form, steps);
+}
+
+function rerenderEnrichmentSteps(form, steps) {
+  const container = form?.querySelector('[data-enrichment-step-list]');
+  if (!container) return;
+  container.innerHTML = renderEnrichmentStepCards(
+    steps,
+    currentResolutionSlotContextFromForm(form),
+    currentResolutionOutputRulesFromDom(form),
+    state.lastData.toolCatalog || [],
+  );
+}
+
+function syncEnrichmentSourceCustom(row) {
+  const mode = row?.querySelector('[data-enrichment-param-source-mode]')?.value || '';
+  const custom = row?.querySelector('[data-enrichment-param-source-custom]');
+  if (!custom) return;
+  custom.hidden = !(mode === 'constant:' || mode === 'secret:' || mode === 'custom:');
+  if (!custom.hidden) {
+    custom.focus();
+  }
+}
+
+function addResolutionOutputRow() {
+  const container = document.querySelector('[data-resolution-output-list]');
+  if (!container) return;
+  const slotOptionsHtml = container.querySelector('[data-resolution-output-slot]')?.innerHTML
+    || document.querySelector('[name="target_slot_id"]')?.innerHTML
+    || '<option value="">нет существующих слотов</option><option value="__custom__" selected>Новый слот: указать ключ ниже</option>';
+  const order = container.querySelectorAll('[data-resolution-output-row]').length + 1;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = `
+    <div class="parameter-binding-row" data-resolution-output-row>
+      <div class="grid two">
+        <label>Слот
+          <select data-resolution-output-slot>${slotOptionsHtml}</select>
+        </label>
+        <label data-resolution-output-slot-custom hidden>Ключ нового выходного слота
+          <input data-resolution-output-slot-custom-value value="" autocomplete="off" placeholder="user_login">
+          <span class="field-help">Используется для первого создания профиля, если выходной слот еще не добавлен в схему слотов.</span>
+        </label>
+        <label>Порядок
+          <input data-resolution-output-order type="number" min="1" max="100" value="${order}">
+        </label>
+        <label>Обязателен для успеха
+          <select data-resolution-output-required>${booleanOptions(false)}</select>
+        </label>
+        <label>Источник значения
+          <input data-resolution-output-source value="" autocomplete="off" placeholder="users.login">
+          <span class="field-help">Поле или путь в именованной сущности результата, например users.login. Итоговое решение принимает LLM-правило.</span>
+        </label>
+        <label>Если не заполнен
+          <select data-resolution-output-fallback>
+            <option value="ask_clarification">уточнить у клиента</option>
+            <option value="operator_handoff">эскалировать оператору</option>
+            <option value="leave_empty" selected>оставить пустым</option>
+          </select>
+        </label>
+      </div>
+      <button class="danger" type="button" data-action="resolution-output-remove">Удалить</button>
+    </div>
+  `.trim();
+  container.appendChild(wrapper.firstElementChild);
+  syncResolutionOutputSlotCustom(container.lastElementChild);
+}
+
+function removeResolutionOutputRow(target) {
+  const row = target.closest('[data-resolution-output-row]');
+  if (!row) return;
+  const container = row.parentElement;
+  if (container && container.querySelectorAll('[data-resolution-output-row]').length <= 1) {
+    throw new Error('Профиль должен содержать хотя бы один выходной слот.');
+  }
+  row.remove();
+}
+
+function addRouteRuleCard() {
+  const container = document.querySelector('[data-route-rules-list]');
+  if (!container) return;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = renderClassificationRuleCard(
+    defaultClassificationRule(),
+    container.querySelectorAll('[data-route-rule-card]').length,
+    true,
+  ).trim();
+  container.appendChild(wrapper.firstElementChild);
+}
+
+function removeRouteRuleCard(target) {
+  const card = target.closest('[data-route-rule-card]');
+  if (!card) return;
+  const container = card.parentElement;
+  if (container && container.querySelectorAll('[data-route-rule-card]').length <= 1) {
+    throw new Error('Маршрут должен содержать хотя бы одно правило классификации.');
+  }
+  card.remove();
+}
+
 function syncAllSlotCardFillMethods() {
   document.querySelectorAll('[data-slot-card]').forEach(syncSlotCardFillMethod);
+}
+
+function syncResolutionTargetSlotCustom(form = document) {
+  const select = form.querySelector?.('[data-resolution-target-slot]');
+  const customField = form.querySelector?.('[data-resolution-target-slot-custom]');
+  if (!select || !customField) return;
+  const visible = select.value === '__custom__';
+  customField.hidden = !visible;
+  customField.querySelectorAll('input, select, textarea').forEach((input) => {
+    input.disabled = !visible;
+  });
+}
+
+function syncResolutionOutputSlotCustom(row) {
+  if (!row) return;
+  const select = row.querySelector?.('[data-resolution-output-slot]');
+  const customField = row.querySelector?.('[data-resolution-output-slot-custom]');
+  if (!select || !customField) return;
+  const visible = select.value === '__custom__';
+  customField.hidden = !visible;
+  customField.querySelectorAll('input, select, textarea').forEach((input) => {
+    input.disabled = !visible;
+  });
+}
+
+function syncAllResolutionOutputSlotCustom(root = document) {
+  root.querySelectorAll?.('[data-resolution-output-row]').forEach(syncResolutionOutputSlotCustom);
+}
+
+function syncSlotAutofillOutputRow(row) {
+  if (!row) return;
+  const action = row.querySelector('[data-slot-autofill-output-action]')?.value || 'ignore';
+  const existing = row.querySelector('[data-slot-autofill-existing-slot]');
+  const newFields = [
+    row.querySelector('[data-slot-autofill-new-slot-id]'),
+    row.querySelector('[data-slot-autofill-new-slot-name]'),
+    row.querySelector('[data-slot-autofill-new-slot-priority]'),
+    row.querySelector('[data-slot-autofill-new-slot-required]'),
+  ].filter(Boolean);
+  if (existing) {
+    existing.hidden = action !== 'existing';
+    existing.querySelectorAll('input, select, textarea').forEach((input) => {
+      input.disabled = action !== 'existing';
+    });
+  }
+  for (const field of newFields) {
+    field.hidden = action !== 'new';
+    field.querySelectorAll('input, select, textarea').forEach((input) => {
+      input.disabled = action !== 'new';
+    });
+  }
+}
+
+function syncAllSlotAutofillOutputRows(root = document) {
+  root.querySelectorAll?.('[data-slot-autofill-output-row]').forEach(syncSlotAutofillOutputRow);
+}
+
+function syncSlotAutofillSourceRow(row) {
+  if (!row) return;
+  const mode = row.querySelector('[data-slot-autofill-param-source-mode]')?.value || '';
+  const custom = row.querySelector('[data-slot-autofill-param-source-custom]');
+  if (!custom) return;
+  custom.hidden = !(mode === 'case:' || mode === 'context:' || mode === 'constant:' || mode === 'secret:');
+  custom.disabled = custom.hidden;
+}
+
+function syncAllSlotAutofillSourceRows(root = document) {
+  root.querySelectorAll?.('[data-slot-autofill-input-row]').forEach(syncSlotAutofillSourceRow);
 }
 
 function removeSlotCard(target) {
@@ -5979,14 +9016,19 @@ function syncParameterBindingRow(row) {
 
 function syncOperationParameterMappingRow(row) {
   const source = row.querySelector('[data-operation-param-source]')?.value || '';
-  const reactWrap = row.querySelector('[data-operation-param-react-wrap]');
-  const valueWrap = row.querySelector('[data-operation-param-value-wrap]');
-  if (reactWrap) {
-    reactWrap.hidden = source !== 'react';
-  }
-  if (valueWrap) {
-    valueWrap.hidden = !source || source === 'react';
-  }
+  row.querySelectorAll('[data-operation-param-react-wrap]').forEach((element) => {
+    element.hidden = source !== 'react';
+  });
+  row.querySelectorAll('[data-operation-param-value-wrap]').forEach((element) => {
+    element.hidden = !source || source === 'react';
+  });
+}
+
+function syncOperationResultMappingRow(row) {
+  const include = parseBoolean(row.querySelector('[data-operation-result-include]')?.value);
+  row.querySelectorAll('[data-operation-result-react-wrap]').forEach((element) => {
+    element.hidden = !include;
+  });
 }
 
 function syncLaunchSelectors(card) {
@@ -6012,7 +9054,7 @@ function syncLaunchSelectors(card) {
   if (bindingStatus) {
     bindingStatus.textContent = binding
       ? operationBindingSummary(binding, integrationEndpoints)
-      : 'У выбранного ReAct-вызова ИИ нет привязки операции. Настройте ее в меню "Привязка операций".';
+      : 'У выбранного ReAct-вызова ИИ нет привязки операции. Настройте ее в меню "Вызовы и интеграции -> Привязка операций".';
     bindingStatus.className = binding ? 'meta' : 'field-help';
   }
 
@@ -6043,6 +9085,7 @@ function addEndpointOperationCard() {
   const wrapper = document.createElement('div');
   wrapper.innerHTML = renderEndpointOperationCard({
     endpointId: document.querySelector('[name="endpoint_id"]')?.value || '',
+    adapterType: document.querySelector('[name="adapter_type"]')?.value || 'mock',
     operationId,
     operation: {
       display_name: 'Новая операция',
@@ -6050,6 +9093,7 @@ function addEndpointOperationCard() {
       method: 'POST',
       path: '/custom/operation',
       request_schema: defaultOperationRequestSchema(),
+      response_schema: defaultOperationResponseSchema(),
       timeout_seconds: 10,
     },
     tools: state.lastData.toolCatalog || [],
@@ -6059,10 +9103,132 @@ function addEndpointOperationCard() {
   container.appendChild(wrapper.firstElementChild);
 }
 
+function nextOperationFieldName(card, kind) {
+  const prefix = kind === 'request' ? 'param' : 'field';
+  const existing = new Set(
+    Array.from(card.querySelectorAll(`[data-operation-schema-editor="${kind}"] [data-operation-field-name]`))
+      .map((input) => input.value.trim())
+      .filter(Boolean),
+  );
+  let index = existing.size + 1;
+  let name = `${prefix}_${index}`;
+  while (existing.has(name)) {
+    index += 1;
+    name = `${prefix}_${index}`;
+  }
+  return name;
+}
+
+function addEndpointOperationFieldRow(target, kind) {
+  const card = target.closest('[data-endpoint-operation-card]');
+  const container = card?.querySelector(`[data-operation-schema-editor="${kind}"] [data-operation-schema-rows]`);
+  if (!card || !container) return;
+  container.querySelector('[data-operation-schema-empty]')?.remove();
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = renderOperationSchemaFieldRow(kind, {
+    name: nextOperationFieldName(card, kind),
+    title: '',
+    type: 'string',
+    item_type: 'object',
+    required: false,
+  }).trim();
+  container.appendChild(wrapper.firstElementChild);
+  if (kind === 'response') {
+    syncEndpointMockRowsFromResponse(card);
+  }
+  updateEndpointOperationJsonPreview(card);
+}
+
+function removeEndpointOperationFieldRow(target) {
+  const row = target.closest('[data-operation-field-row]');
+  const card = target.closest('[data-endpoint-operation-card]');
+  const kind = row?.dataset.schemaKind;
+  if (!row || !card || !kind) return;
+  row.remove();
+  const container = card.querySelector(`[data-operation-schema-editor="${kind}"] [data-operation-schema-rows]`);
+  if (container && !container.querySelector('[data-operation-field-row]')) {
+    container.innerHTML = operationSchemaEmpty(kind);
+  }
+  if (kind === 'response') {
+    syncEndpointMockRowsFromResponse(card);
+  }
+  updateEndpointOperationJsonPreview(card);
+}
+
 function removeEndpointOperationCard(target) {
   const card = target.closest('[data-endpoint-operation-card]');
-  if (!card || target.disabled) return;
+  if (!card) return;
   card.remove();
+}
+
+function currentMockOutputFromCard(card) {
+  try {
+    return buildMockOutputFromEditor(card, { validate: false }) || {};
+  } catch {
+    return {};
+  }
+}
+
+function replaceOperationSchemaRows(card, kind, schema) {
+  const container = card.querySelector(`[data-operation-schema-editor="${kind}"] [data-operation-schema-rows]`);
+  if (!container) return;
+  const fields = operationSchemaFields(schema);
+  container.innerHTML = fields.length
+    ? fields.map((field) => renderOperationSchemaFieldRow(kind, field)).join('')
+    : operationSchemaEmpty(kind);
+}
+
+function syncEndpointMockRowsFromResponse(card) {
+  const container = card.querySelector('[data-operation-mock-rows]');
+  if (!container) return;
+  let responseSchema = defaultOperationResponseSchema();
+  try {
+    responseSchema = buildOperationSchemaFromEditor(card, 'response');
+  } catch {
+    return;
+  }
+  container.innerHTML = renderOperationMockRows(responseSchema, currentMockOutputFromCard(card));
+}
+
+function updateEndpointOperationJsonPreview(card) {
+  if (!card) return;
+  try {
+    const requestSchema = buildOperationSchemaFromEditor(card, 'request');
+    const responseSchema = buildOperationSchemaFromEditor(card, 'response');
+    const requestTextarea = card.querySelector('[data-operation-json-kind="request"]');
+    const responseTextarea = card.querySelector('[data-operation-json-kind="response"]');
+    const mockTextarea = card.querySelector('[data-operation-json-kind="mock"]');
+    if (requestTextarea) requestTextarea.value = jsonPretty(requestSchema);
+    if (responseTextarea) responseTextarea.value = jsonPretty(responseSchema);
+    if (mockTextarea && card.querySelector('[data-operation-mock-editor]')) {
+      mockTextarea.value = jsonPretty(buildMockOutputFromEditor(card, { validate: false }) || {});
+    }
+  } catch {
+    // Пока администратор заполняет строку, JSON-превью может быть временно невалидным.
+  }
+}
+
+function applyEndpointOperationJsonToForm(target) {
+  const card = target.closest('[data-endpoint-operation-card]');
+  if (!card) return;
+  const requestSchema = parseJsonField(
+    card.querySelector('[data-operation-json-kind="request"]')?.value || jsonPretty(defaultOperationRequestSchema()),
+    'JSON входа операции',
+  );
+  const responseSchema = parseJsonField(
+    card.querySelector('[data-operation-json-kind="response"]')?.value || jsonPretty(defaultOperationResponseSchema()),
+    'JSON ответа операции',
+  );
+  const mockText = card.querySelector('[data-operation-json-kind="mock"]')?.value?.trim() || '';
+  const mockOutput = mockText ? parseJsonField(mockText, 'JSON тестового ответа') : {};
+  replaceOperationSchemaRows(card, 'request', requestSchema);
+  replaceOperationSchemaRows(card, 'response', responseSchema);
+  const mockContainer = card.querySelector('[data-operation-mock-rows]');
+  if (mockContainer) {
+    mockContainer.innerHTML = renderOperationMockRows(responseSchema, mockOutput);
+  }
+  updateEndpointOperationJsonPreview(card);
+  setNotice('JSON применен в форму операции.', 'success');
 }
 
 function syncOperationBindingOperationOptions(form) {
@@ -6072,14 +9238,21 @@ function syncOperationBindingOperationOptions(form) {
   const operationSelect = form.querySelector('[data-operation-binding-operation]');
   if (!endpointSelect || !operationSelect) return;
   const endpoint = endpoints.find((item) => item.endpoint_id === endpointSelect.value) || null;
+  const operationIds = Object.keys(endpoint?.operations || {});
+  const selectedOperationId = operationIds.includes(operationSelect.value)
+    ? operationSelect.value
+    : operationIds[0] || '';
   state.operationBindingEndpointId = endpointSelect.value;
-  operationSelect.innerHTML = operationOptionsForEndpoint(endpoint, operationSelect.value);
-  state.operationBindingOperationId = operationSelect.value;
+  operationSelect.innerHTML = operationOptionsForEndpoint(endpoint, selectedOperationId);
+  operationSelect.value = selectedOperationId;
+  state.operationBindingOperationId = selectedOperationId;
 }
 
 function addChannelProfileCard() {
   const container = document.getElementById('channelProfileCards');
   if (!container) return;
+  const mode = document.querySelector('select[name="mode"]')?.value || 'debug';
+  const defaultActionType = channelActionTypes(mode)[0] || 'debug_stop';
   const existingIds = new Set(
     Array.from(container.querySelectorAll('input[name="profile_id"]')).map((input) => input.value),
   );
@@ -6095,10 +9268,10 @@ function addChannelProfileCard() {
     display_name: '',
     event_type: 'standard_handoff',
     action: {
-      action_type: 'debug_stop',
+      action_type: defaultActionType,
       message_template: 'Остановить сценарий и показать сообщение оператору.',
     },
-  }).trim();
+  }, mode).trim();
   container.appendChild(wrapper.firstElementChild);
 }
 
@@ -6162,9 +9335,16 @@ function initEvents() {
     if (
       action === 'slot-remove'
       || action === 'launch-remove'
+      || action === 'route-rule-remove'
       || action === 'model-provider-remove'
       || action === 'channel-profile-remove'
       || action === 'endpoint-operation-remove'
+      || action === 'endpoint-request-field-remove'
+      || action === 'endpoint-response-field-remove'
+      || action === 'enrichment-step-remove'
+      || action === 'resolution-result-field-remove'
+      || action === 'resolution-output-remove'
+      || action === 'slot-autofill-output-remove'
     ) {
       event.preventDefault();
       event.stopPropagation();
@@ -6179,6 +9359,25 @@ function initEvents() {
         await runEvaluation();
       } else if (action === 'scenario-load') {
         await renderView(state.activeView);
+      } else if (action === 'orchestration-graph-load') {
+        await renderOrchestrationGraph();
+      } else if (action === 'graph-node-select') {
+        state.orchestrationGraphSelectedNodeId = target.dataset.nodeId;
+        await renderOrchestrationGraph();
+      } else if (action === 'graph-zoom-in') {
+        setGraphZoom(state.orchestrationGraphZoom * 1.15);
+      } else if (action === 'graph-zoom-out') {
+        setGraphZoom(state.orchestrationGraphZoom / 1.15);
+      } else if (action === 'graph-zoom-reset') {
+        state.orchestrationGraphZoom = 1;
+        state.orchestrationGraphPanX = 20;
+        state.orchestrationGraphPanY = 20;
+        updateGraphViewport();
+      } else if (action === 'graph-zoom-fit') {
+        fitGraphToCanvas();
+      } else if (action === 'graph-config-link') {
+        applyGraphConfigRefSelection(target.dataset.graphDomain, target.dataset.graphRefId);
+        await loadView(target.dataset.graphView || 'scenarios');
       } else if (action === 'scenario-operation') {
         state.scenarioOperation = target.dataset.operation;
         await renderScenarios();
@@ -6187,6 +9386,11 @@ function initEvents() {
       } else if (action === 'slot-schema-operation') {
         state.slotSchemaOperation = target.dataset.operation;
         await renderScenarioSlots();
+      } else if (action === 'slot-autofill-load') {
+        await renderSlotAutofillProfiles();
+      } else if (action === 'slot-autofill-operation') {
+        state.slotAutofillOperation = target.dataset.operation;
+        await renderSlotAutofillProfiles();
       } else if (action === 'route-load') {
         await renderScenarioClassification();
       } else if (action === 'route-operation') {
@@ -6234,6 +9438,9 @@ function initEvents() {
         await renderReactCalls();
       } else if (action === 'operation-binding-load') {
         await renderOperationBindings();
+      } else if (action === 'operation-binding-mode') {
+        state.operationBindingMode = target.dataset.mode || 'bind';
+        await renderOperationBindings();
       } else if (action === 'model-provider-switch') {
         await switchModelProvider(target.dataset.provider);
       } else if (action === 'model-provider-add') {
@@ -6244,6 +9451,28 @@ function initEvents() {
         addSlotCard();
       } else if (action === 'slot-remove') {
         removeSlotCard(target);
+      } else if (action === 'slot-autofill-output-add') {
+        addSlotAutofillOutputRow(target);
+      } else if (action === 'slot-autofill-output-remove') {
+        removeSlotAutofillOutputRow(target);
+      } else if (action === 'resolution-result-field-add') {
+        addResolutionResultFieldRow(target);
+      } else if (action === 'resolution-result-field-remove') {
+        removeResolutionResultFieldRow(target);
+      } else if (action === 'enrichment-step-add') {
+        addEnrichmentStep(target);
+      } else if (action === 'enrichment-step-edit') {
+        editEnrichmentStep(target);
+      } else if (action === 'enrichment-step-remove') {
+        removeEnrichmentStep(target);
+      } else if (action === 'resolution-output-add') {
+        addResolutionOutputRow();
+      } else if (action === 'resolution-output-remove') {
+        removeResolutionOutputRow(target);
+      } else if (action === 'route-rule-add') {
+        addRouteRuleCard();
+      } else if (action === 'route-rule-remove') {
+        removeRouteRuleCard(target);
       } else if (action === 'launch-add') {
         addLaunchCard();
       } else if (action === 'launch-remove') {
@@ -6256,6 +9485,14 @@ function initEvents() {
         addEndpointOperationCard();
       } else if (action === 'endpoint-operation-remove') {
         removeEndpointOperationCard(target);
+      } else if (action === 'endpoint-request-field-add') {
+        addEndpointOperationFieldRow(target, 'request');
+      } else if (action === 'endpoint-response-field-add') {
+        addEndpointOperationFieldRow(target, 'response');
+      } else if (action === 'endpoint-request-field-remove' || action === 'endpoint-response-field-remove') {
+        removeEndpointOperationFieldRow(target);
+      } else if (action === 'endpoint-operation-json-apply') {
+        applyEndpointOperationJsonToForm(target);
       }
     } catch (error) {
       setNotice(error.message || String(error), 'error');
@@ -6266,12 +9503,32 @@ function initEvents() {
 
   document.addEventListener('change', async (event) => {
     const target = event.target;
+    if (target?.matches?.('[data-confidence-override-enabled]')) {
+      syncConfidenceOverrideBlock(target.closest('[data-confidence-override]'));
+      return;
+    }
+    if (target?.matches?.('[data-operation-contract-control]')) {
+      const card = target.closest('[data-endpoint-operation-card]');
+      if (target.closest('[data-operation-schema-editor="response"]')) {
+        syncEndpointMockRowsFromResponse(card);
+      }
+      updateEndpointOperationJsonPreview(card);
+      return;
+    }
+    if (target?.matches?.('[data-operation-mock-control]')) {
+      updateEndpointOperationJsonPreview(target.closest('[data-endpoint-operation-card]'));
+      return;
+    }
     if (target?.matches?.('[data-binding-source], [data-binding-slot-select]')) {
       syncParameterBindingRow(target.closest('[data-param-binding-row]'));
       return;
     }
     if (target?.matches?.('[data-operation-param-source]')) {
       syncOperationParameterMappingRow(target.closest('[data-operation-param-row]'));
+      return;
+    }
+    if (target?.matches?.('[data-operation-result-include]')) {
+      syncOperationResultMappingRow(target.closest('[data-operation-result-row]'));
       return;
     }
     if (target?.matches?.('[data-operation-binding-endpoint]')) {
@@ -6284,14 +9541,63 @@ function initEvents() {
       await renderOperationBindings();
       return;
     }
+    if (target?.matches?.('[data-graph-view-select]')) {
+      state.orchestrationGraphView = target.value;
+      state.orchestrationGraphSelectedNodeId = 'slot_filling';
+      await renderOrchestrationGraph();
+      return;
+    }
+    if (target?.matches?.('[data-graph-scenario-select]')) {
+      state.orchestrationGraphScenarioId = target.value;
+      state.scenarioId = target.value;
+      state.orchestrationGraphSelectedNodeId = 'slot_filling';
+      await renderOrchestrationGraph();
+      return;
+    }
     if (target?.matches?.('[data-slot-fill-method]')) {
       syncSlotCardFillMethod(target.closest('[data-slot-card]'));
+      return;
+    }
+    if (target?.matches?.('[data-slot-autofill-output-action]')) {
+      syncSlotAutofillOutputRow(target.closest('[data-slot-autofill-output-row]'));
+      return;
+    }
+    if (target?.matches?.('[data-slot-autofill-param-source-mode]')) {
+      syncSlotAutofillSourceRow(target.closest('[data-slot-autofill-input-row]'));
+      return;
+    }
+    if (target?.matches?.('[data-resolution-slot-scenario]')) {
+      state.resolutionSlotScenarioId = target.value;
+      await renderResolutionProfiles();
+      return;
+    }
+    if (target?.matches?.('[data-resolution-target-slot]')) {
+      syncResolutionTargetSlotCustom(target.closest('form'));
+      return;
+    }
+    if (target?.matches?.('[data-resolution-output-slot]')) {
+      syncResolutionOutputSlotCustom(target.closest('[data-resolution-output-row]'));
+      return;
+    }
+    if (target?.matches?.('[data-enrichment-react-call]')) {
+      refreshEnrichmentStepCard(target);
+      return;
+    }
+    if (target?.matches?.('[data-enrichment-param-source-mode]')) {
+      syncEnrichmentSourceCustom(target.closest('[data-enrichment-param-row]'));
       return;
     }
     if (!target?.matches?.('[data-launch-tool]')) {
       return;
     }
     syncLaunchSelectors(target.closest('[data-launch-card]'));
+  });
+
+  document.addEventListener('input', (event) => {
+    const target = event.target;
+    if (target?.matches?.('[data-operation-contract-control], [data-operation-mock-control]')) {
+      updateEndpointOperationJsonPreview(target.closest('[data-endpoint-operation-card]'));
+    }
   });
 
   document.addEventListener('submit', async (event) => {
@@ -6311,6 +9617,10 @@ function initEvents() {
         await saveSlotSchemaForm(form);
       } else if (form.dataset.form === 'slot-schema-delete') {
         await deleteSlotSchemaForm();
+      } else if (form.dataset.form === 'slot-autofill-editor') {
+        await saveSlotAutofillProfileForm(form);
+      } else if (form.dataset.form === 'slot-autofill-delete') {
+        await deleteSlotAutofillProfileForm();
       } else if (form.dataset.form === 'route-editor') {
         await saveRouteForm(form);
       } else if (form.dataset.form === 'route-delete') {
@@ -6353,6 +9663,8 @@ function initEvents() {
         await deleteToolCatalogForm();
       } else if (form.dataset.form === 'operation-binding-editor') {
         await saveOperationBindingForm(form, event.submitter);
+      } else if (form.dataset.form === 'operation-binding-create-editor') {
+        await saveOperationBindingCreateForm(form);
       } else if (form.dataset.form === 'operation-binding-delete') {
         await deleteOperationBindingForm();
       } else if (form.dataset.form === 'audit-filter') {

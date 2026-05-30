@@ -166,6 +166,9 @@ class ContractRegistry:
             "attribute_resolution_profiles": self.contracts_root
             / "config"
             / "attribute-resolution-profiles.schema.json",
+            "slot_autofill_profiles": self.contracts_root
+            / "config"
+            / "slot-autofill-profiles.schema.json",
             "service_scenarios": self.contracts_root
             / "config"
             / "service-scenarios.schema.json",
@@ -259,6 +262,18 @@ class ContractRegistry:
                     errors.append(
                         f"{endpoint['endpoint_id']}/{operation_id} request_schema невалидна: {error.message}"
                     )
+                try:
+                    Draft202012Validator.check_schema(operation["response_schema"])
+                except SchemaError as error:
+                    errors.append(
+                        f"{endpoint['endpoint_id']}/{operation_id} response_schema невалидна: {error.message}"
+                    )
+                if operation.get("mock_output") is not None:
+                    validator = Draft202012Validator(operation["response_schema"])
+                    for error in validator.iter_errors(operation["mock_output"]):
+                        errors.append(
+                            f"{endpoint['endpoint_id']}/{operation_id} mock_output не соответствует response_schema: {error.message}"
+                        )
 
         seen_tool_names: set[str] = set()
         for tool in self.tool_catalog["tools"]:
@@ -296,6 +311,13 @@ class ContractRegistry:
                         errors.append(
                             f"{tool_name} не заполняет обязательный параметр операции "
                             f"{binding['endpoint_id']}/{binding['operation_id']}: {required_parameter}"
+                        )
+                result_mapping = binding.get("result_mapping", {})
+                for required_field in tool["result_schema"].get("required", []):
+                    if required_field not in result_mapping:
+                        errors.append(
+                            f"{tool_name} не маппит обязательное поле результата "
+                            f"{binding['endpoint_id']}/{binding['operation_id']}: {required_field}"
                         )
 
         if errors:

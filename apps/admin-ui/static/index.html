@@ -20,7 +20,9 @@
             <div class="nav-group-title">Сценарии обработки</div>
             <div class="nav-sublist">
               <button class="nav-item nav-subitem" type="button" data-view="scenarios">Сценарии</button>
+              <button class="nav-item nav-subitem" type="button" data-view="orchestrationGraph">Граф оркестрации</button>
               <button class="nav-item nav-subitem" type="button" data-view="scenarioSlots">0. Слоты</button>
+              <button class="nav-item nav-subitem" type="button" data-view="slotAutofill">0.1 Автозаполнение слотов</button>
               <button class="nav-item nav-subitem" type="button" data-view="resolution">1. Разрешение атрибутов</button>
               <button class="nav-item nav-subitem" type="button" data-view="scenarioClassification">2. Классификация и маршрут</button>
               <button class="nav-item nav-subitem" type="button" data-view="scenarioReact">3. ReAct-планирование</button>
@@ -31,9 +33,14 @@
             </div>
           </div>
           <button class="nav-item" type="button" data-view="knowledge">База знаний</button>
-          <button class="nav-item" type="button" data-view="integrations">Интеграции</button>
-          <button class="nav-item" type="button" data-view="reactCalls">ReAct-вызовы ИИ</button>
-          <button class="nav-item" type="button" data-view="operationBindings">Привязка операций</button>
+          <div class="nav-group" aria-label="Вызовы и интеграции">
+            <div class="nav-group-title">Вызовы и интеграции</div>
+            <div class="nav-sublist">
+              <button class="nav-item nav-subitem" type="button" data-view="integrations">Интеграции</button>
+              <button class="nav-item nav-subitem" type="button" data-view="reactCalls">ReAct-вызовы ИИ</button>
+              <button class="nav-item nav-subitem" type="button" data-view="operationBindings">Привязка операций</button>
+            </div>
+          </div>
           <button class="nav-item" type="button" data-view="workflow">Рабочий процесс</button>
           <button class="nav-item" type="button" data-view="models">Модели</button>
           <button class="nav-item" type="button" data-view="quality">Контроль качества</button>
@@ -46,7 +53,7 @@
         <header class="topbar">
           <div>
             <h1 id="viewTitle">Панель обзора</h1>
-            <div class="subhead" id="apiStatus">API ожидается</div>
+            <div class="subhead" id="apiStatus">Ожидание API</div>
           </div>
           <div class="admin-actions">
             <label for="actorId">Инициатор</label>
@@ -60,6 +67,6 @@
       </main>
     </div>
 
-    <script src="/admin/static/app.js?v=stage13_18_react_calls_bindings"></script>
+    <script src="/admin/static/app.js?v=stage13_40_confidence_override_toggle"></script>
   </body>
 </html>
